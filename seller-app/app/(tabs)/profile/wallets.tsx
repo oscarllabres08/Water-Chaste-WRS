@@ -6,7 +6,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { supabase } from '../../../lib/supabase';
-import { prepareImageForUpload } from '../../../lib/prepareImageForUpload';
+import { imageUploadPresets, prepareImageForUpload } from '../../../lib/prepareImageForUpload';
 import { readPreparedImageBytes } from '../../../lib/readPreparedImageBytes';
 import { useAuth } from '../../../providers/AuthProvider';
 import { Screen } from '../../../ui/components/Screen';
@@ -182,7 +182,7 @@ export default function WalletsScreen() {
     if (res.canceled) return null;
     try {
       const asset = res.assets[0];
-      const prepared = await prepareImageForUpload(asset.uri);
+      const prepared = await prepareImageForUpload(asset.uri, imageUploadPresets.qr);
       if (!businessId) return null;
       const path = `${businessId}/qr/${Date.now()}.jpg`;
       const bytes = await readPreparedImageBytes(prepared);

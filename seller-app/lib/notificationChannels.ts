@@ -8,10 +8,10 @@ import { Platform } from 'react-native';
 export const NOTIF_SOUND_RAW = 'notification';
 
 /** Bump when replacing notification.wav so devices get a fresh channel sound. */
-export const NOTIF_CHANNEL_SOUND = 'wrs_alerts_v3';
+export const NOTIF_CHANNEL_SOUND = 'wrs_alerts_v4';
 export const NOTIF_CHANNEL_SILENT = 'wrs_silent_v1';
 
-const LEGACY_CHANNEL_IDS = ['default', 'silent'];
+const LEGACY_CHANNEL_IDS = ['default', 'silent', 'wrs_alerts_v3'];
 
 export function notificationContentSound(soundOn: boolean): string | undefined {
   if (!soundOn) return undefined;
@@ -31,7 +31,7 @@ export async function ensureAndroidNotificationChannels(): Promise<void> {
 
   await Notifications.setNotificationChannelAsync(NOTIF_CHANNEL_SOUND, {
     name: 'Order alerts (sound)',
-    description: 'New orders with sound and vibration',
+    description: 'Alerts with the Water Chaste notification sound',
     importance: Notifications.AndroidImportance.MAX,
     sound: NOTIF_SOUND_RAW,
     audioAttributes: {

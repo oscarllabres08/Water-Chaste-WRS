@@ -4,7 +4,7 @@ import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
-import { Pressable } from 'react-native';
+import { Pressable, View } from 'react-native';
 
 import { useColorScheme } from '../components/useColorScheme';
 import { AuthProvider, useAuth } from '../providers/AuthProvider';
@@ -32,21 +32,34 @@ export {
 
 export const unstable_settings = {
   // Ensure that reloading on `/modal` keeps a back button present.
-  initialRouteName: '(tabs)',
+  initialRouteName: '(auth)',
 };
 
 // Prevent the splash screen from auto-hiding before asset loading is complete.
 SplashScreen.preventAutoHideAsync();
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => {
-    const { notificationsEnabled, soundEnabled } = getNotificationRuntimePrefs();
+  handleNotification: async (notification) => {
+    const data = notification?.request?.content?.data as Record<string, unknown> | undefined;
+    const soundOnly = data?.soundOnly === '1';
+    if (soundOnly) {
+      return {
+        shouldShowAlert: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      };
+    }
+    const { notificationsEnabled } = getNotificationRuntimePrefs();
     const show = notificationsEnabled;
     return {
       shouldShowAlert: show,
       shouldShowBanner: show,
       shouldShowList: show,
-      shouldPlaySound: show && soundEnabled,
+      // Foreground sound is notification.wav from playNotificationSound.
+      // Background alerts use the Android channel sound (same file).
+      shouldPlaySound: false,
       shouldSetBadge: false,
     };
   },
@@ -118,7 +131,7 @@ function RootLayoutNav() {
 }
 
 function AuthGate() {
-  const { user, loading, profileLoading, gateMessage } = useAuth();
+  const { user, loading, profileLoading, accessReady, canEnterApp } = useAuth();
   const { toast, dismissToast } = useNotifications();
   const { visibleOrders, dismissBanner } = usePendingOrderReminder();
   const segments = useSegments();
@@ -129,6 +142,7 @@ function AuthGate() {
 
   useEffect(() => {
     const sub = Notifications.addNotificationResponseReceivedListener((response) => {
+      if (!canEnterApp) return;
       const data = response.notification.request.content.data as
         | { orderId?: string; kind?: string; pendingUserId?: string }
         | undefined;
@@ -143,29 +157,25 @@ function AuthGate() {
       router.push('/(tabs)/orders');
     });
     return () => sub.remove();
-  }, [router]);
+  }, [canEnterApp, router]);
+
+  const checkingAccess = loading || (Boolean(user) && (!accessReady || profileLoading));
 
   useEffect(() => {
-    if (loading || (user && profileLoading)) return;
+    if (checkingAccess) return;
     const inAuth = segments[0] === '(auth)';
-
-    if (!user && !inAuth) {
-      router.replace('/(auth)/sign-in');
-      return;
-    }
-
-    // Enter app only when leaving auth — do not force /orders on every tab change.
-    if (user && inAuth && !gateMessage) {
-      router.replace('/(tabs)/orders');
-      return;
-    }
-
     const inTabs = segments[0] === '(tabs)';
     const onAppScreen = inTabs || segments[0] === 'order' || segments[0] === 'modal';
-    if (user && !gateMessage && !inAuth && !onAppScreen) {
+
+    if (!canEnterApp) {
+      if (!inAuth) router.replace('/(auth)/sign-in');
+      return;
+    }
+
+    if (inAuth || !onAppScreen) {
       router.replace('/(tabs)/orders');
     }
-  }, [user, loading, profileLoading, gateMessage, segments, router]);
+  }, [checkingAccess, canEnterApp, segments, router]);
 
   return (
     <>
@@ -181,6 +191,21 @@ function AuthGate() {
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
       </Stack>
+
+      {checkingAccess ? (
+        <View
+          pointerEvents="auto"
+          style={{
+            position: 'absolute',
+            top: 0,
+            right: 0,
+            bottom: 0,
+            left: 0,
+            backgroundColor: theme.colors.bg,
+            zIndex: 80,
+          }}
+        />
+      ) : null}
 
       {reminderBannerVisible ? (
         <PendingOrderReminderBanner
@@ -208,6 +233,7 @@ function AuthGate() {
             onPress={() => {
               const data = (toast.data ?? {}) as { orderId?: string; kind?: string; pendingUserId?: string };
               dismissToast();
+              if (!canEnterApp) return;
               if (data?.kind === 'seller_registration_pending') {
                 router.push('/(tabs)/notifications');
                 return;

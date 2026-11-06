@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
-import { parseAuthCredentials, sanitizeAuthEmail, sanitizeAuthPassword } from '../../lib/authInputSecurity';
+import { sanitizeAuthPassword } from '../../lib/authInputSecurity';
+import { customerLoginEmail, sanitizeCustomerLogin, usernameTakenMessage } from '../../lib/customerUsername';
 import { supabase } from '../../lib/supabase';
 import { Screen } from '../../ui/components/Screen';
 import { Card } from '../../ui/components/Card';
@@ -16,7 +17,7 @@ const authLogo = require('../../assets/logo.png');
 
 export default function SignInScreen() {
   const router = useRouter();
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -59,20 +60,24 @@ export default function SignInScreen() {
     }
     setLoading(true);
     try {
-      const creds = parseAuthCredentials(email, password, { mode: 'login' });
-      if (!creds.ok) {
-        setError(creds.error);
+      const login = customerLoginEmail(username);
+      if (!login.ok) {
+        setError(login.error);
+        return;
+      }
+      if (!password) {
+        setError('Please enter your password.');
         return;
       }
       const { error: err } = await supabase.auth.signInWithPassword({
-        email: creds.email,
-        password: creds.password,
+        email: login.email,
+        password,
       });
       if (err) throw err;
       router.replace('/(tabs)');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Login failed';
-      setError(msg);
+      setError(usernameTakenMessage(msg) ?? (msg === 'Invalid login credentials' ? 'Wrong username or password.' : msg));
     } finally {
       setLoading(false);
     }
@@ -123,12 +128,15 @@ export default function SignInScreen() {
             <Card>
               <View style={{ gap: 10 }}>
                 <TextField
-                  label="Email"
-                  value={email}
-                  onChangeText={(t) => setEmail(sanitizeAuthEmail(t))}
-                  placeholder="you@example.com"
+                  label="Username"
+                  value={username}
+                  onChangeText={(t) => {
+                    const cleaned = sanitizeCustomerLogin(t);
+                    setUsername(cleaned.includes('@') ? cleaned : cleaned.toLowerCase());
+                  }}
+                  placeholder="juan123"
                   autoCapitalize="none"
-                  keyboardType="email-address"
+                  autoCorrect={false}
                   maxLength={254}
                 />
                 <TextField

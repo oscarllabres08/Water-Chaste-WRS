@@ -2,11 +2,15 @@ import { useState } from 'react';
 import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
+import { sanitizeAuthPassword } from '../../lib/authInputSecurity';
 import {
-  parseAuthCredentials,
-  sanitizeAuthEmail,
-  sanitizeAuthPasswordSignup,
-} from '../../lib/authInputSecurity';
+  customerUsernameEmail,
+  sanitizeCustomerUsername,
+  usernameTakenMessage,
+  validateCompleteName,
+  validateCustomerPassword,
+  validateCustomerUsername,
+} from '../../lib/customerUsername';
 import { LEGAL_VERSION } from '../../lib/legalContent';
 import { setLegalOnboardingAccepted } from '../../lib/legalOnboarding';
 import { supabase } from '../../lib/supabase';
@@ -22,10 +26,8 @@ const authLogo = require('../../assets/logo.png');
 
 export default function SignUpScreen() {
   const router = useRouter();
-  const [displayName, setDisplayName] = useState('');
-  const [contactNumber, setContactNumber] = useState('');
-  const [address, setAddress] = useState('');
-  const [email, setEmail] = useState('');
+  const [completeName, setCompleteName] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [accepted, setAccepted] = useState(false);
@@ -36,17 +38,27 @@ export default function SignUpScreen() {
     setError(null);
     setLoading(true);
     try {
-      if (!displayName.trim() || !contactNumber.trim() || !address.trim()) {
-        setError('Please fill Name, Contact number, and Complete address.');
+      const name = validateCompleteName(completeName);
+      if (!name.ok) {
+        setError(name.error);
         return;
       }
-      const creds = parseAuthCredentials(email, password, { mode: 'signup' });
-      if (!creds.ok) {
-        setError(creds.error);
+      const user = validateCustomerUsername(username);
+      if (!user.ok) {
+        setError(user.error);
         return;
       }
-      const confirm = sanitizeAuthPasswordSignup(confirmPassword, false);
-      if (creds.password !== confirm) {
+      const pass = validateCustomerPassword(password);
+      if (!pass.ok) {
+        setError(pass.error);
+        return;
+      }
+      const confirm = validateCustomerPassword(confirmPassword);
+      if (!confirm.ok) {
+        setError(confirm.error);
+        return;
+      }
+      if (pass.value !== confirm.value) {
         setError('Passwords do not match.');
         return;
       }
@@ -55,13 +67,22 @@ export default function SignUpScreen() {
         return;
       }
 
+      const { data: taken, error: takenErr } = await supabase.rpc('customer_username_taken', {
+        p_username: user.value,
+      });
+      if (!takenErr && taken === true) {
+        setError('That username is already used. Please choose another.');
+        return;
+      }
+
       const acceptedAt = await setLegalOnboardingAccepted();
       const { data, error: err } = await supabase.auth.signUp({
-        email: creds.email,
-        password: creds.password,
+        email: customerUsernameEmail(user.value),
+        password: pass.value,
         options: {
           data: {
-            display_name: displayName.trim() || creds.email,
+            display_name: name.value,
+            username: user.value,
             terms_accepted_at: acceptedAt,
             privacy_policy_version: LEGAL_VERSION,
           },
@@ -70,21 +91,28 @@ export default function SignUpScreen() {
       if (err) throw err;
 
       if (data.user?.id) {
-        const { error: profErr } = await supabase
+        const withUsername = await supabase
           .from('profiles')
           .update({
-            display_name: displayName.trim() || email.trim(),
-            phone: contactNumber.trim(),
-            address: address.trim(),
+            display_name: name.value,
+            username: user.value,
           })
           .eq('user_id', data.user.id);
-        if (profErr) throw profErr;
+        if (withUsername.error) {
+          const missingColumn = /username/i.test(withUsername.error.message) && /column|schema/i.test(withUsername.error.message);
+          if (!missingColumn) throw withUsername.error;
+          const fallback = await supabase
+            .from('profiles')
+            .update({ display_name: name.value })
+            .eq('user_id', data.user.id);
+          if (fallback.error) throw fallback.error;
+        }
       }
 
       router.replace('/(tabs)');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Register failed';
-      setError(msg);
+      setError(usernameTakenMessage(msg) ?? msg);
     } finally {
       setLoading(false);
     }
@@ -121,34 +149,33 @@ export default function SignUpScreen() {
           Create account
         </Text>
         <Text variant="muted" style={{ marginTop: 4 }}>
-          Register to place an order and track delivery.
+          Enter your name and a username. No email needed.
         </Text>
 
         <View style={{ marginTop: theme.spacing.md, gap: theme.spacing.sm }}>
           <Card>
             <View style={{ gap: 10 }}>
-              <TextField label="Name" value={displayName} onChangeText={setDisplayName} placeholder="Juan Dela Cruz" />
               <TextField
-                label="Contact number"
-                value={contactNumber}
-                onChangeText={setContactNumber}
-                placeholder="09xx xxx xxxx"
-                inputMode="tel"
+                label="Complete name"
+                value={completeName}
+                onChangeText={setCompleteName}
+                placeholder="Juan Dela Cruz"
+                autoCapitalize="words"
+                maxLength={80}
               />
-              <TextField label="Complete address" value={address} onChangeText={setAddress} placeholder="House no., street, barangay, city" />
               <TextField
-                label="Email"
-                value={email}
-                onChangeText={(t) => setEmail(sanitizeAuthEmail(t))}
-                placeholder="you@example.com"
+                label="Username"
+                value={username}
+                onChangeText={(t) => setUsername(sanitizeCustomerUsername(t))}
+                placeholder="juan123"
                 autoCapitalize="none"
-                keyboardType="email-address"
-                maxLength={254}
+                autoCorrect={false}
+                maxLength={20}
               />
               <TextField
                 label="Password"
                 value={password}
-                onChangeText={(t) => setPassword(sanitizeAuthPasswordSignup(t, false))}
+                onChangeText={(t) => setPassword(sanitizeAuthPassword(t))}
                 placeholder="Create a password"
                 autoCapitalize="none"
                 autoCorrect={false}
@@ -158,7 +185,7 @@ export default function SignUpScreen() {
               <TextField
                 label="Confirm password"
                 value={confirmPassword}
-                onChangeText={(t) => setConfirmPassword(sanitizeAuthPasswordSignup(t, false))}
+                onChangeText={(t) => setConfirmPassword(sanitizeAuthPassword(t))}
                 placeholder="Confirm your password"
                 autoCapitalize="none"
                 autoCorrect={false}

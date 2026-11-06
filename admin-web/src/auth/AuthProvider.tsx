@@ -114,9 +114,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const [profile, setProfile] = useState<ProfileRow | null>(null);
 
+  const [businessId, setBusinessId] = useState<string | null>(null);
+
   const [gateMessage, setGateMessage] = useState<string | null>(null);
 
   const attemptedAutoRegisterRef = useRef<string | null>(null);
+  const profileReadyFor = useRef<string | null>(null);
 
 
 
@@ -131,12 +134,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setProfileLoading(false);
 
       attemptedAutoRegisterRef.current = null;
+      profileReadyFor.current = null;
 
       return;
 
     }
 
-    setProfileLoading(true);
+    if (profileReadyFor.current !== uid) setProfileLoading(true);
 
     try {
 
@@ -211,6 +215,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
 
         setProfile(null);
+        profileReadyFor.current = null;
 
         return;
 
@@ -233,6 +238,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut();
 
           setProfile(null);
+          profileReadyFor.current = null;
 
           return;
 
@@ -245,6 +251,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           await supabase.auth.signOut();
 
           setProfile(null);
+          profileReadyFor.current = null;
 
           return;
 
@@ -261,6 +268,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         await supabase.auth.signOut();
 
         setProfile(null);
+        profileReadyFor.current = null;
 
         return;
 
@@ -270,11 +278,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       setGateMessage(null);
 
+      profileReadyFor.current = uid;
       setProfile(row);
 
     } catch {
 
       setProfile(null);
+      profileReadyFor.current = null;
 
     } finally {
 
@@ -282,7 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
     }
 
-  }, [session?.user?.id, session?.user?.user_metadata]);
+  }, [session?.user?.id]);
 
 
 
@@ -342,15 +352,45 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
 
-  const businessId = useMemo(() => {
+  useEffect(() => {
 
-    if (!session?.user?.id || !profile) return null;
+    const uid = session?.user?.id;
 
-    if (isOwnerProfile(profile)) return session.user.id;
+    if (!uid || !profile) {
 
-    if (isApprovedStaff(profile)) return profile.seller_workspace_owner_id;
+      setBusinessId(null);
 
-    return null;
+      return;
+
+    }
+
+    const fallback = isOwnerProfile(profile)
+
+      ? uid
+
+      : isApprovedStaff(profile)
+
+        ? profile.seller_workspace_owner_id
+
+        : null;
+
+    setBusinessId(fallback);
+
+    let cancelled = false;
+
+    void supabase.rpc('seller_business_id', { uid }).then(({ data, error }) => {
+
+      if (cancelled) return;
+
+      setBusinessId(!error && typeof data === 'string' && data ? data : fallback);
+
+    });
+
+    return () => {
+
+      cancelled = true;
+
+    };
 
   }, [session?.user?.id, profile]);
 
@@ -384,6 +424,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       signOut: async () => {
 
+        profileReadyFor.current = null;
         await supabase.auth.signOut();
 
         setProfile(null);

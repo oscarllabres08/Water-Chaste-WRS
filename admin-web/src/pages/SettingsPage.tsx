@@ -422,7 +422,8 @@ export function SettingsPage() {
       ) : null}
 
       {section === 'general' ? (
-      <>
+      <div className="settings-board">
+      <div className="settings-board-main">
       <SettingsSection
         title="Seller app download PIN"
         subtitle="PIN required on the public download page to unlock the Seller app APK"
@@ -491,7 +492,9 @@ export function SettingsPage() {
           </button>
         </form>
       </SettingsSection>
+      </div>
 
+      <div className="settings-board-side">
       {isStoreOwner ? (
         <SettingsSection
           title="Clear sales & order history"
@@ -583,7 +586,8 @@ export function SettingsPage() {
           </li>
         </ul>
       </SettingsSection>
-      </>
+      </div>
+      </div>
       ) : null}
     </div>
   );

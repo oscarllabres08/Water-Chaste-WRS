@@ -1,45 +1,59 @@
-/** Long edge cap (px) — keeps uploads small for Supabase Storage. */
-const MAX_EDGE = 1024;
-const MIN_EDGE = 640;
-const JPEG_QUALITY_START = 0.82;
-const JPEG_QUALITY_MIN = 0.5;
-const TARGET_MAX_BYTES = 450_000;
-const SKIP_IF_JPEG_UNDER_BYTES = 180_000;
+export type ImageCompressOptions = {
+  maxEdge?: number;
+  minEdge?: number;
+  targetMaxBytes?: number;
+  qualityStart?: number;
+  qualityMin?: number;
+};
+
+/** Smaller files for Supabase Storage. QR stays sharper so it can still be scanned. */
+export const imageUploadPresets = {
+  avatar: { maxEdge: 512, minEdge: 256, targetMaxBytes: 80_000, qualityStart: 0.7, qualityMin: 0.42 },
+  logo: { maxEdge: 640, minEdge: 320, targetMaxBytes: 100_000, qualityStart: 0.72, qualityMin: 0.45 },
+  qr: { maxEdge: 720, minEdge: 480, targetMaxBytes: 130_000, qualityStart: 0.82, qualityMin: 0.62 },
+  product: { maxEdge: 800, minEdge: 420, targetMaxBytes: 150_000, qualityStart: 0.72, qualityMin: 0.42 },
+  proof: { maxEdge: 1200, minEdge: 640, targetMaxBytes: 180_000, qualityStart: 0.7, qualityMin: 0.42 },
+} as const;
+
+const FALLBACK = imageUploadPresets.product;
 
 function isImageFile(file: File): boolean {
   if (file.type.startsWith('image/')) return true;
   return /\.(jpe?g|png|webp|heic|heif|gif)$/i.test(file.name);
 }
 
-export async function compressImageForUpload(file: File): Promise<File> {
+function resolveOptions(options?: ImageCompressOptions) {
+  return {
+    maxEdge: options?.maxEdge ?? FALLBACK.maxEdge,
+    minEdge: options?.minEdge ?? FALLBACK.minEdge,
+    targetMaxBytes: options?.targetMaxBytes ?? FALLBACK.targetMaxBytes,
+    qualityStart: options?.qualityStart ?? FALLBACK.qualityStart,
+    qualityMin: options?.qualityMin ?? FALLBACK.qualityMin,
+  };
+}
+
+/** Resize and JPEG-compress before uploading to Supabase Storage. */
+export async function compressImageForUpload(file: File, options?: ImageCompressOptions): Promise<File> {
   if (!isImageFile(file)) {
     throw new Error('Please choose an image file.');
   }
-  if (file.type === 'image/gif') {
-    if (file.size > TARGET_MAX_BYTES) {
-      throw new Error('GIF is too large. Save as JPG or PNG first.');
-    }
-    return file;
-  }
-  if (file.type === 'image/jpeg' && file.size <= SKIP_IF_JPEG_UNDER_BYTES) {
-    return file;
-  }
 
-  let edge = MAX_EDGE;
-  let quality = JPEG_QUALITY_START;
+  const { maxEdge, minEdge, targetMaxBytes, qualityStart, qualityMin } = resolveOptions(options);
+  let edge = maxEdge;
+  let quality = qualityStart;
   let lastBlob: Blob | null = null;
 
   for (let attempt = 0; attempt < 8; attempt += 1) {
     const blob = await imageFileToJpegBlob(file, edge, quality);
     lastBlob = blob;
-    if (blob.size <= TARGET_MAX_BYTES) break;
-    if (quality > JPEG_QUALITY_MIN) {
-      quality = Math.max(JPEG_QUALITY_MIN, quality - 0.1);
+    if (blob.size <= targetMaxBytes) break;
+    if (quality > qualityMin) {
+      quality = Math.max(qualityMin, Math.round((quality - 0.08) * 100) / 100);
       continue;
     }
-    if (edge > MIN_EDGE) {
-      edge = Math.max(MIN_EDGE, Math.round(edge * 0.85));
-      quality = JPEG_QUALITY_START;
+    if (edge > minEdge) {
+      edge = Math.max(minEdge, Math.round(edge * 0.8));
+      quality = qualityStart;
       continue;
     }
     break;
@@ -47,9 +61,6 @@ export async function compressImageForUpload(file: File): Promise<File> {
 
   if (!lastBlob) {
     throw new Error('Could not compress image.');
-  }
-  if (lastBlob.size > TARGET_MAX_BYTES * 2 && file.size > TARGET_MAX_BYTES) {
-    throw new Error('Image is still too large after compression. Try a smaller photo.');
   }
 
   const base = file.name.replace(/\.[^.]+$/i, '').trim() || 'image';
@@ -74,14 +85,9 @@ async function imageFileToJpegBlob(file: File, maxEdge: number, quality: number)
     ctx.fillRect(0, 0, w, h);
     ctx.drawImage(img, 0, 0, w, h);
 
-    const blob = await new Promise<Blob>((resolve, reject) => {
-      canvas.toBlob(
-        (b) => (b ? resolve(b) : reject(new Error('Compression failed'))),
-        'image/jpeg',
-        quality
-      );
+    return await new Promise<Blob>((resolve, reject) => {
+      canvas.toBlob((blob) => (blob ? resolve(blob) : reject(new Error('Compression failed'))), 'image/jpeg', quality);
     });
-    return blob;
   } finally {
     URL.revokeObjectURL(url);
   }

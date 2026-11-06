@@ -3,12 +3,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Image, Pressable, RefreshControl, ScrollView, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
-import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
+import { readCurrentAddress } from '../../../lib/currentAddress';
 import { useAuth } from '../../../providers/AuthProvider';
 import { useNotifications } from '../../../providers/NotificationsProvider';
 import { supabase } from '../../../lib/supabase';
-import { prepareImageForUpload } from '../../../lib/prepareImageForUpload';
+import { imageUploadPresets, prepareImageForUpload } from '../../../lib/prepareImageForUpload';
 import { readPreparedImageBytes } from '../../../lib/readPreparedImageBytes';
 import { Screen } from '../../../ui/components/Screen';
 import { Card } from '../../../ui/components/Card';
@@ -22,12 +22,21 @@ import { theme } from '../../../ui/theme';
 
 type ProfileRow = {
   display_name: string | null;
+  username: string | null;
   phone: string | null;
   address: string | null;
   latitude: number | null;
   longitude: number | null;
   avatar_path: string | null;
 };
+
+function usernameFromAccount(username: string | null | undefined, email: string | null | undefined): string {
+  const saved = (username ?? '').trim();
+  if (saved) return saved;
+  const [local, domain] = (email ?? '').split('@');
+  if (domain === 'customer.waterchaste.app' && local) return local;
+  return '';
+}
 
 export default function ProfileIndexScreen() {
   const router = useRouter();
@@ -51,6 +60,7 @@ export default function ProfileIndexScreen() {
   const [locating, setLocating] = useState(false);
   const [locationMsg, setLocationMsg] = useState<string | null>(null);
   const [avatarPath, setAvatarPath] = useState<string | null>(null);
+  const [avatarStamp, setAvatarStamp] = useState(0);
   const [loggingOut, setLoggingOut] = useState(false);
   const [logoutModalOpen, setLogoutModalOpen] = useState(false);
 
@@ -65,7 +75,7 @@ export default function ProfileIndexScreen() {
 
     const { data: prof, error: pErr } = await supabase
       .from('profiles')
-      .select('display_name,phone,address,latitude,longitude,avatar_path')
+      .select('display_name,username,phone,address,latitude,longitude,avatar_path')
       .eq('user_id', userId)
       .maybeSingle();
     if (pErr) setErr(pErr.message);
@@ -135,19 +145,35 @@ export default function ProfileIndexScreen() {
   }
 
   async function useCurrentLocation() {
+    if (!user) return;
     setLocationMsg(null);
     setLocating(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setLocationMsg('Location permission denied.');
+      const result = await readCurrentAddress();
+      if (!result.ok) {
+        setLocationMsg(result.error);
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      setLocationMsg('Location updated. Don’t forget to Save.');
-    } catch {
-      setLocationMsg('Could not get location.');
+      setCoords({ latitude: result.latitude, longitude: result.longitude });
+      setAddress(result.address);
+      const { error } = await supabase
+        .from('profiles')
+        .update({
+          address: result.address,
+          latitude: result.latitude,
+          longitude: result.longitude,
+        })
+        .eq('user_id', user.id);
+      if (error) {
+        setLocationMsg(error.message);
+        return;
+      }
+      setProfile((prev) =>
+        prev
+          ? { ...prev, address: result.address, latitude: result.latitude, longitude: result.longitude }
+          : prev
+      );
+      setLocationMsg('Address saved to your profile.');
     } finally {
       setLocating(false);
     }
@@ -181,13 +207,14 @@ export default function ProfileIndexScreen() {
       if (!asset?.uri) return;
 
       setSaving(true);
-      const prepared = await prepareImageForUpload(asset.uri);
+      const prepared = await prepareImageForUpload(asset.uri, imageUploadPresets.avatar);
       const objectPath = `avatars/customer-${user.id}.jpg`;
       const bytes = await readPreparedImageBytes(prepared);
 
       const { error: upErr } = await supabase.storage.from('wrs-assets').upload(objectPath, bytes, {
         upsert: true,
         contentType: prepared.contentType,
+        cacheControl: '60',
       });
       if (upErr) throw new Error(upErr.message);
 
@@ -195,8 +222,9 @@ export default function ProfileIndexScreen() {
       if (profErr) throw profErr;
 
       setAvatarPath(objectPath);
+      setAvatarStamp(Date.now());
       setProfile((prev) => (prev ? { ...prev, avatar_path: objectPath } : prev));
-      setSavedMsg('Avatar saved successfully.');
+      setSavedMsg('Profile photo saved.');
     } catch (e) {
       const msg = e instanceof Error ? e.message : 'Failed to upload avatar';
       setErr(msg);
@@ -205,8 +233,14 @@ export default function ProfileIndexScreen() {
     }
   }
 
+  const shownAvatarUri = (() => {
+    const base = publicImageUrl(avatarPath);
+    if (!base) return null;
+    return avatarStamp ? `${base}?v=${avatarStamp}` : base;
+  })();
+
   return (
-    <Screen style={{ padding: 0 }}>
+    <Screen style={{ padding: 0 }} enter>
       <LogoutConfirmModal
         visible={logoutModalOpen}
         onDismiss={() => {
@@ -238,9 +272,14 @@ export default function ProfileIndexScreen() {
         contentContainerStyle={{ padding: theme.spacing.md, paddingBottom: theme.spacing.xl }}
       >
         <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text variant="title" weight="extrabold" style={{ flex: 1 }}>
-            Profile
-          </Text>
+          <View style={{ flex: 1 }}>
+            <Text variant="title" weight="extrabold">
+              Profile
+            </Text>
+            <Text variant="muted" style={{ marginTop: 2 }}>
+              Your name, address, and orders.
+            </Text>
+          </View>
           <Pressable
             onPress={() => setNotifOpen(true)}
             style={{
@@ -287,82 +326,151 @@ export default function ProfileIndexScreen() {
           </Card>
         ) : (
           <>
-            <Card style={{ marginTop: theme.spacing.md }}>
+            <Card style={{ marginTop: theme.spacing.md, padding: 0, overflow: 'hidden' }}>
               {loading ? (
-                <View style={{ gap: 10 }}>
+                <View style={{ gap: 10, padding: theme.spacing.md }}>
                   <Skeleton height={14} width="40%" radius={10} />
                   <Skeleton height={44} width="100%" radius={14} />
                   <Skeleton height={44} width="100%" radius={14} />
                   <Skeleton height={64} width="100%" radius={14} />
                 </View>
               ) : (
-                <View style={{ gap: 12 }}>
-                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+                <View>
+                  <View
+                    style={{
+                      flexDirection: 'row',
+                      alignItems: 'center',
+                      gap: 12,
+                      padding: theme.spacing.md,
+                      backgroundColor: 'rgba(0,183,245,0.12)',
+                    }}
+                  >
                     <Pressable
                       onPress={pickAvatar}
                       style={{
-                        width: 72,
-                        height: 72,
-                        borderRadius: 24,
-                        borderWidth: 1,
-                        borderColor: theme.colors.border,
-                        backgroundColor: 'rgba(0,114,240,0.08)',
+                        width: 76,
+                        height: 76,
+                        borderRadius: 38,
+                        borderWidth: 3,
+                        borderColor: '#fff',
+                        backgroundColor: 'rgba(0,116,240,0.12)',
                         alignItems: 'center',
                         justifyContent: 'center',
                         overflow: 'hidden',
                       }}
                     >
-                      {avatarPath ? (
-                        <Image source={{ uri: publicImageUrl(avatarPath) ?? '' }} style={{ width: 72, height: 72 }} resizeMode="cover" />
+                      {shownAvatarUri ? (
+                        <Image source={{ uri: shownAvatarUri }} style={{ width: 76, height: 76 }} resizeMode="cover" />
                       ) : (
-                        <Text weight="extrabold" style={{ color: theme.colors.primary, fontSize: 26 }}>
-                          {(name.trim()[0] ?? user.email?.[0] ?? 'A').toUpperCase()}
+                        <Text weight="semibold" style={{ color: theme.colors.primary, fontSize: 28 }}>
+                          {(name.trim()[0] ?? 'C').toUpperCase()}
                         </Text>
                       )}
                       <View
                         style={{
                           position: 'absolute',
-                          right: 6,
-                          bottom: 6,
-                          width: 24,
-                          height: 24,
-                          borderRadius: 10,
-                          backgroundColor: '#fff',
-                          borderWidth: 1,
-                          borderColor: theme.colors.border,
+                          right: 2,
+                          bottom: 2,
+                          width: 22,
+                          height: 22,
+                          borderRadius: 11,
+                          backgroundColor: theme.colors.primary,
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
                       >
-                        <Ionicons name="camera-outline" size={14} color={theme.colors.primary} />
+                        <Ionicons name="camera" size={12} color="#fff" />
                       </View>
                     </Pressable>
 
                     <View style={{ flex: 1 }}>
-                      <Text variant="h2" weight="extrabold">
+                      <Text weight="semibold" style={{ fontSize: 20, lineHeight: 24 }}>
                         {name.trim() || 'Customer'}
                       </Text>
-                      <Text variant="muted" style={{ marginTop: 2 }}>
-                        {user.email}
-                      </Text>
+                      <View
+                        style={{
+                          alignSelf: 'flex-start',
+                          marginTop: 6,
+                          paddingHorizontal: 8,
+                          paddingVertical: 3,
+                          borderRadius: 999,
+                          backgroundColor: 'rgba(255,255,255,0.8)',
+                        }}
+                      >
+                        <Text variant="chip" style={{ color: theme.colors.primaryDark }}>
+                          @{usernameFromAccount(profile?.username, user.email) || 'username'}
+                        </Text>
+                      </View>
+                      <Pressable
+                        accessibilityRole="button"
+                        accessibilityLabel="Change profile photo"
+                        disabled={saving}
+                        onPress={() => void pickAvatar()}
+                        style={{ alignSelf: 'flex-start', marginTop: 8, paddingVertical: 2 }}
+                      >
+                        <Text weight="semibold" style={{ color: theme.colors.primary, fontSize: 13 }}>
+                          {saving ? 'Uploading photo…' : 'Change photo'}
+                        </Text>
+                      </Pressable>
                     </View>
 
-                    <Button
-                      variant="ghost"
-                      title={editing ? 'Close' : 'Edit'}
+                    <Pressable
                       onPress={() => {
                         setErr(null);
                         setSavedMsg(null);
                         setEditing((v) => !v);
                       }}
-                    />
+                      style={{
+                        paddingHorizontal: 12,
+                        paddingVertical: 7,
+                        borderRadius: 999,
+                        backgroundColor: '#fff',
+                      }}
+                    >
+                      <Text weight="semibold" style={{ color: theme.colors.primary, fontSize: 13 }}>
+                        {editing ? 'Done' : 'Edit'}
+                      </Text>
+                    </Pressable>
                   </View>
 
-                  {editing ? (
-                    <View style={{ gap: 10 }}>
-                      <TextField label="Name" value={name} onChangeText={setName} placeholder="Juan Dela Cruz" />
+                  {!editing && (err || savedMsg) ? (
+                    <Text
+                      style={{
+                        marginHorizontal: theme.spacing.md,
+                        marginTop: 4,
+                        color: err ? theme.colors.danger : theme.colors.success,
+                        fontSize: 13,
+                      }}
+                    >
+                      {err || savedMsg}
+                    </Text>
+                  ) : null}
+
+                  {!editing ? (
+                    <View style={{ padding: theme.spacing.md, gap: 12 }}>
+                      <ProfileInfo icon="person-outline" label="Complete name" value={name.trim() || 'Not added yet'} />
+                      <ProfileInfo
+                        icon="at-outline"
+                        label="Username"
+                        value={usernameFromAccount(profile?.username, user.email) || 'Not set'}
+                      />
+                      <ProfileInfo icon="call-outline" label="Contact number" value={phone.trim() || 'Not added yet'} />
+                      <ProfileInfo
+                        icon="location-outline"
+                        label="Address"
+                        value={address.trim() || 'No address yet. Add one before you order.'}
+                      />
+                    </View>
+                  ) : (
+                    <View style={{ padding: theme.spacing.md, gap: 10 }}>
+                      <Text variant="muted">Update only what you need. Username stays the same.</Text>
+                      <TextField label="Complete name" value={name} onChangeText={setName} placeholder="Juan Dela Cruz" />
+                      <TextField
+                        label="Username"
+                        value={usernameFromAccount(profile?.username, user.email) || '—'}
+                        editable={false}
+                      />
                       <TextField label="Contact number" value={phone} onChangeText={setPhone} placeholder="09xx xxx xxxx" inputMode="tel" />
-                      <TextField label="Email" value={user.email ?? ''} editable={false} />
                       <TextField
                         label="Address"
                         value={address}
@@ -370,35 +478,42 @@ export default function ProfileIndexScreen() {
                         placeholder="House no., street, barangay, city"
                         multiline
                         numberOfLines={3}
-                        inputStyle={{ height: 86, textAlignVertical: 'top' } as any}
+                        inputStyle={{ height: 72, textAlignVertical: 'top' } as any}
                       />
 
-                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-                        <Button
-                          variant="ghost"
-                          title={locating ? 'Getting location…' : 'Use Current Location'}
-                          leadingIcon={
-                            locating ? (
-                              <ActivityIndicator size="small" color={theme.colors.text} />
-                            ) : (
-                              <Ionicons name="location" size={20} color={theme.colors.text} />
-                            )
-                          }
-                          onPress={useCurrentLocation}
-                          disabled={locating || saving}
-                        />
-                        {coords ? (
-                          <Text variant="muted">
-                            📍 {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-                          </Text>
+                      <Pressable
+                        onPress={useCurrentLocation}
+                        disabled={locating || saving}
+                        style={{
+                          alignSelf: 'flex-start',
+                          flexDirection: 'row',
+                          alignItems: 'center',
+                          gap: 6,
+                          paddingVertical: 7,
+                          paddingHorizontal: 12,
+                          borderRadius: 999,
+                          backgroundColor: 'rgba(0,183,245,0.14)',
+                          opacity: locating || saving ? 0.6 : 1,
+                        }}
+                      >
+                        {locating ? (
+                          <ActivityIndicator size="small" color={theme.colors.primary} />
                         ) : (
-                          <Text variant="muted">📍 No location saved yet</Text>
+                          <Ionicons name="locate-outline" size={15} color={theme.colors.primary} />
                         )}
-                      </View>
+                        <Text weight="semibold" style={{ color: theme.colors.primary, fontSize: 13 }}>
+                          {locating ? 'Finding location…' : 'Use current location'}
+                        </Text>
+                      </Pressable>
+                      <Text variant="chip" style={{ color: theme.colors.muted }}>
+                        {coords
+                          ? `Saved pin ${coords.latitude.toFixed(4)}, ${coords.longitude.toFixed(4)}`
+                          : 'No location saved yet'}
+                      </Text>
                       {locationMsg ? <Text variant="muted">{locationMsg}</Text> : null}
 
                       {err ? (
-                        <Text weight="bold" style={{ color: theme.colors.danger }}>
+                        <Text weight="semibold" style={{ color: theme.colors.danger }}>
                           {err}
                         </Text>
                       ) : null}
@@ -407,77 +522,75 @@ export default function ProfileIndexScreen() {
                           style={{
                             flexDirection: 'row',
                             alignItems: 'center',
-                            gap: 10,
-                            paddingVertical: 12,
-                            paddingHorizontal: 14,
-                            borderRadius: theme.radius.lg,
-                            backgroundColor: 'rgba(34, 197, 94, 0.12)',
-                            borderWidth: 1,
-                            borderColor: 'rgba(34, 197, 94, 0.28)',
+                            gap: 8,
+                            paddingVertical: 8,
+                            paddingHorizontal: 12,
+                            borderRadius: 12,
+                            backgroundColor: 'rgba(47,184,74,0.12)',
                           }}
-                          accessibilityRole="text"
-                          accessibilityLabel={savedMsg}
                         >
-                          <Ionicons name="checkmark-circle" size={22} color={theme.colors.success} />
-                          <Text weight="bold" style={{ color: theme.colors.success, flex: 1, fontSize: 15 }}>
+                          <Ionicons name="checkmark-circle" size={18} color={theme.colors.success} />
+                          <Text weight="semibold" style={{ color: theme.colors.success, flex: 1 }}>
                             {savedMsg}
                           </Text>
                         </View>
                       ) : null}
 
-                      <Button title={saving ? 'Saving…' : 'Save'} disabled={saving || !hasChanges} onPress={saveProfile} />
+                      <View style={{ alignSelf: 'flex-start' }}>
+                        <Button
+                          title={saving ? 'Saving…' : 'Save changes'}
+                          disabled={saving || !hasChanges}
+                          onPress={saveProfile}
+                          style={{ paddingVertical: 8, paddingHorizontal: 16 }}
+                        />
+                      </View>
                     </View>
-                  ) : null}
+                  )}
                 </View>
               )}
             </Card>
 
             <Card style={{ marginTop: theme.spacing.sm }}>
-              <Text variant="h2" weight="extrabold">
-                My Orders
+              <Text weight="semibold" style={{ fontSize: 15, marginBottom: 4 }}>
+                More
               </Text>
-              <Text variant="muted" style={{ marginTop: 4 }}>
-                View active and delivered orders.
-              </Text>
-              <View style={{ marginTop: 10 }}>
-                <Button title="Open My Orders" onPress={() => router.push('/(tabs)/profile/orders')} />
-              </View>
+              <Row title="My orders" subtitle="Active and delivered" icon="receipt-outline" onPress={() => router.push('/(tabs)/profile/orders')} />
+              <Divider />
+              <Row
+                title="Account settings"
+                subtitle="Password"
+                icon="settings-outline"
+                onPress={() => router.push('/(tabs)/profile/account-settings')}
+              />
+              <Divider />
+              <Row title="Notifications" icon="notifications-outline" onPress={() => router.push('/(tabs)/profile/notifications')} />
+              <Divider />
+              <Row title="Help Center" icon="help-circle-outline" onPress={() => router.push('/(tabs)/profile/help')} />
+              <Divider />
+              <Row title="Terms & Conditions" icon="document-text-outline" onPress={() => router.push('/legal/terms')} />
+              <Divider />
+              <Row title="Privacy Policy" icon="shield-checkmark-outline" onPress={() => router.push('/legal/privacy')} />
             </Card>
 
-            <Card style={{ marginTop: theme.spacing.sm }}>
-              <Text variant="h2" weight="extrabold">
-                Settings
+            <Pressable
+              onPress={() => !loggingOut && setLogoutModalOpen(true)}
+              disabled={loggingOut}
+              style={{
+                alignSelf: 'center',
+                marginTop: theme.spacing.md,
+                paddingVertical: 8,
+                paddingHorizontal: 18,
+                borderRadius: 999,
+                borderWidth: 1,
+                borderColor: 'rgba(229,72,77,0.35)',
+                backgroundColor: 'rgba(229,72,77,0.06)',
+                opacity: loggingOut ? 0.6 : 1,
+              }}
+            >
+              <Text weight="semibold" style={{ color: theme.colors.danger, fontSize: 14 }}>
+                Log out
               </Text>
-              <View style={{ marginTop: 8 }}>
-                <Row
-                  title="Account settings"
-                  icon="settings-outline"
-                  onPress={() => router.push('/(tabs)/profile/account-settings')}
-                />
-                <Divider />
-                <Row title="Notifications" icon="notifications-outline" onPress={() => router.push('/(tabs)/profile/notifications')} />
-                <Divider />
-                <Row title="Help Center" icon="help-circle-outline" onPress={() => router.push('/(tabs)/profile/help')} />
-                <Divider />
-                <Row title="Terms & Conditions" icon="document-text-outline" onPress={() => router.push('/legal/terms')} />
-                <Divider />
-                <Row title="Privacy Policy" icon="shield-checkmark-outline" onPress={() => router.push('/legal/privacy')} />
-              </View>
-            </Card>
-
-            <Card style={{ marginTop: theme.spacing.sm }}>
-              <Text variant="muted" weight="bold" style={{ fontSize: 12 }}>
-                End session
-              </Text>
-              <View style={{ marginTop: 10 }}>
-                <Button
-                  variant="ghost"
-                  title="Logout"
-                  disabled={loggingOut}
-                  onPress={() => !loggingOut && setLogoutModalOpen(true)}
-                />
-              </View>
-            </Card>
+            </Pressable>
           </>
         )}
       </ScrollView>
@@ -485,33 +598,73 @@ export default function ProfileIndexScreen() {
   );
 }
 
-function Divider() {
-  return <View style={{ height: 1, backgroundColor: theme.colors.border }} />;
-}
-
 type IonIconName = ComponentProps<typeof Ionicons>['name'];
 
-function Row({ title, icon, onPress }: { title: string; icon: IonIconName; onPress: () => void }) {
+function ProfileInfo({ icon, label, value }: { icon: IonIconName; label: string; value: string }) {
   return (
-    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 12, gap: 12 }}>
+    <View style={{ flexDirection: 'row', gap: 10, alignItems: 'flex-start' }}>
       <View
         style={{
-          width: 40,
-          height: 40,
-          borderRadius: 12,
-          backgroundColor: 'rgba(0,114,240,0.08)',
-          borderWidth: 1,
-          borderColor: 'rgba(0,114,240,0.12)',
+          width: 32,
+          height: 32,
+          borderRadius: 10,
+          backgroundColor: 'rgba(0,116,240,0.08)',
           alignItems: 'center',
           justifyContent: 'center',
         }}
       >
-        <Ionicons name={icon} size={20} color={theme.colors.primary} />
+        <Ionicons name={icon} size={16} color={theme.colors.primary} />
       </View>
-      <Text weight="extrabold" style={{ flex: 1 }}>
-        {title}
-      </Text>
-      <Ionicons name="chevron-forward" size={18} color={theme.colors.muted} />
+      <View style={{ flex: 1 }}>
+        <Text variant="chip" style={{ color: theme.colors.muted }}>
+          {label}
+        </Text>
+        <Text weight="semibold" style={{ marginTop: 1, lineHeight: 20 }}>
+          {value}
+        </Text>
+      </View>
+    </View>
+  );
+}
+
+function Divider() {
+  return <View style={{ height: 1, backgroundColor: theme.colors.border }} />;
+}
+
+function Row({
+  title,
+  subtitle,
+  icon,
+  onPress,
+}: {
+  title: string;
+  subtitle?: string;
+  icon: IonIconName;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable onPress={onPress} style={{ flexDirection: 'row', alignItems: 'center', paddingVertical: 10, gap: 12 }}>
+      <View
+        style={{
+          width: 34,
+          height: 34,
+          borderRadius: 11,
+          backgroundColor: 'rgba(0,116,240,0.08)',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        <Ionicons name={icon} size={17} color={theme.colors.primary} />
+      </View>
+      <View style={{ flex: 1 }}>
+        <Text weight="semibold">{title}</Text>
+        {subtitle ? (
+          <Text variant="chip" style={{ color: theme.colors.muted, marginTop: 1 }}>
+            {subtitle}
+          </Text>
+        ) : null}
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={theme.colors.muted} />
     </Pressable>
   );
 }

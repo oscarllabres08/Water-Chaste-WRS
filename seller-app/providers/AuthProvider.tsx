@@ -27,6 +27,10 @@ type AuthContextValue = {
   sellerJoinStatus: SellerJoinStatus | null;
   isStoreOwner: boolean;
   gateMessage: string | null;
+  /** True only after approval is confirmed. Pending or rejected accounts never get this. */
+  canEnterApp: boolean;
+  /** False while a signed-in account is still being checked. */
+  accessReady: boolean;
   clearGateMessage: () => void;
   refreshSellerProfile: () => Promise<void>;
   signOut: () => Promise<void>;
@@ -37,15 +41,25 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 const WAITING_APPROVAL_MSG =
   'Your registration is waiting for approval. You cannot sign in until the master admin approves your account on Staff account approval in the admin website.';
 
-function computeBusinessId(p: ProfileRow | null, userId: string): string | null {
-  if (!p || p.role !== 'seller') return null;
-  const team = p.seller_team_role;
-  const join = p.seller_join_status ?? 'approved';
-  if (team === 'staff' && join === 'approved' && p.seller_workspace_owner_id) {
-    return p.seller_workspace_owner_id;
+const REJECTED_MSG =
+  'Your registration was rejected and removed. Contact the store administrator if you need access.';
+
+function denialMessage(row: ProfileRow): string | null {
+  const status = row.seller_join_status;
+  const team = row.seller_team_role;
+  if (status === 'rejected') return REJECTED_MSG;
+  if (status === 'pending') return WAITING_APPROVAL_MSG;
+  if (team === 'staff') {
+    if (status !== 'approved' || !row.seller_workspace_owner_id) return WAITING_APPROVAL_MSG;
   }
-  if (team === 'owner') return userId;
-  if (team == null) return userId;
+  return null;
+}
+
+function computeBusinessId(p: ProfileRow | null, userId: string): string | null {
+  if (!p || p.role !== 'seller' || denialMessage(p)) return null;
+  const team = p.seller_team_role;
+  if (team === 'staff' && p.seller_workspace_owner_id) return p.seller_workspace_owner_id;
+  if (team === 'owner' || team == null) return userId;
   return null;
 }
 
@@ -65,14 +79,20 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [profileLoading, setProfileLoading] = useState(false);
   const [sellerProfile, setSellerProfile] = useState<ProfileRow | null>(null);
+  const [businessId, setBusinessId] = useState<string | null>(null);
   const [gateMessage, setGateMessage] = useState<string | null>(null);
+  const [accessReady, setAccessReady] = useState(false);
   const attemptedAutoRegisterRef = useRef<string | null>(null);
+  const checkGen = useRef(0);
 
   const refreshSellerProfile = useCallback(async () => {
     const uid = session?.user?.id;
+    const gen = ++checkGen.current;
+    const stillCurrent = () => checkGen.current === gen;
     if (!uid) {
       setSellerProfile(null);
       setProfileLoading(false);
+      setAccessReady(true);
       attemptedAutoRegisterRef.current = null;
       return;
     }
@@ -101,42 +121,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           });
           if (!regErr && regObj?.ok !== false) {
             row = await loadProfile();
-            if (row?.role === 'seller' && row.seller_team_role === 'owner') {
-              setGateMessage(null);
-              setSellerProfile(row);
-              return;
-            }
           }
         }
       }
 
-      if (!row || row.role !== 'seller') {
-        setGateMessage(WAITING_APPROVAL_MSG);
-        await supabase.auth.signOut();
+      if (!stillCurrent()) return;
+
+      const blocked = !row || row.role !== 'seller' ? WAITING_APPROVAL_MSG : denialMessage(row);
+      if (blocked) {
+        setGateMessage(blocked);
         setSellerProfile(null);
+        await supabase.auth.signOut();
         return;
       }
 
-      if (row.seller_team_role === 'staff' && row.seller_join_status === 'pending') {
-        setGateMessage(WAITING_APPROVAL_MSG);
-        await supabase.auth.signOut();
-        setSellerProfile(null);
-        return;
-      }
-
-      if (row.seller_team_role === 'staff' && row.seller_join_status === 'rejected') {
-        setGateMessage('Your registration was rejected and removed. Contact the store administrator if you need access.');
-        await supabase.auth.signOut();
-        setSellerProfile(null);
-        return;
-      }
-
+      if (!stillCurrent()) return;
       setGateMessage(null);
       setSellerProfile(row);
     } catch {
+      if (!stillCurrent()) return;
       setSellerProfile(null);
+      setGateMessage(WAITING_APPROVAL_MSG);
+      await supabase.auth.signOut();
     } finally {
-      setProfileLoading(false);
+      if (stillCurrent()) {
+        setProfileLoading(false);
+        setAccessReady(true);
+      }
     }
   }, [session]);
 
@@ -146,7 +157,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .getSession()
       .then(({ data }) => {
         if (!mounted) return;
-        setSession(data.session ?? null);
+        const next = data.session ?? null;
+        setSession(next);
+        if (next?.user) {
+          setProfileLoading(true);
+          setAccessReady(false);
+          setSellerProfile(null);
+        } else {
+          setAccessReady(true);
+        }
         setLoading(false);
       })
       .catch(() => {
@@ -154,8 +173,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         setLoading(false);
       });
 
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: sub } = supabase.auth.onAuthStateChange((event, nextSession) => {
       setSession(nextSession ?? null);
+      if (!nextSession?.user) {
+        setSellerProfile(null);
+        setProfileLoading(false);
+        setAccessReady(true);
+        return;
+      }
+      if (event === 'SIGNED_IN') {
+        setSellerProfile(null);
+        setProfileLoading(true);
+        setAccessReady(false);
+      }
     });
 
     return () => {
@@ -168,10 +198,23 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     void refreshSellerProfile();
   }, [refreshSellerProfile]);
 
-  const businessId = useMemo(
-    () => (session?.user?.id ? computeBusinessId(sellerProfile, session.user.id) : null),
-    [session?.user?.id, sellerProfile]
-  );
+  useEffect(() => {
+    const uid = session?.user?.id;
+    if (!uid || !sellerProfile) {
+      setBusinessId(null);
+      return;
+    }
+    const fallback = computeBusinessId(sellerProfile, uid);
+    setBusinessId(fallback);
+    let cancelled = false;
+    void supabase.rpc('seller_business_id', { uid }).then(({ data, error }) => {
+      if (cancelled) return;
+      setBusinessId(!error && typeof data === 'string' && data ? data : fallback);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [session?.user?.id, sellerProfile]);
 
   const sellerTeamRole = useMemo(() => {
     const t = sellerProfile?.seller_team_role;
@@ -188,6 +231,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, [sellerProfile]);
 
   const isStoreOwner = sellerTeamRole === 'owner';
+  const canEnterApp = Boolean(session?.user && sellerProfile && businessId && !gateMessage);
 
   const value = useMemo<AuthContextValue>(
     () => ({
@@ -201,6 +245,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sellerJoinStatus,
       isStoreOwner,
       gateMessage,
+      canEnterApp,
+      accessReady,
       clearGateMessage: () => setGateMessage(null),
       refreshSellerProfile,
       signOut: async () => {
@@ -218,6 +264,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       sellerJoinStatus,
       isStoreOwner,
       gateMessage,
+      canEnterApp,
+      accessReady,
       refreshSellerProfile,
     ]
   );

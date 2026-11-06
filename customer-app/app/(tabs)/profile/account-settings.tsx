@@ -61,12 +61,17 @@ export default function AccountSettingsScreen() {
   return (
     <Screen style={{ padding: 0 }} safeAreaEdges={['left', 'right']}>
       <ScrollView contentContainerStyle={{ padding: theme.spacing.md, paddingBottom: theme.spacing.xl }}>
-        <Card>
-          <Text variant="muted" style={{ marginTop: 4 }}>
-            Update your password.
-          </Text>
+        <Card style={{ padding: 0, overflow: 'hidden' }}>
+          <View style={{ padding: theme.spacing.md, backgroundColor: 'rgba(0,183,245,0.12)' }}>
+            <Text weight="semibold" style={{ fontSize: 18 }}>
+              Password
+            </Text>
+            <Text variant="muted" style={{ marginTop: 2 }}>
+              Use a password you can remember.
+            </Text>
+          </View>
 
-          <View style={{ marginTop: 12, gap: 10 }}>
+          <View style={{ padding: theme.spacing.md, gap: 10 }}>
             <TextField
               label="Current password"
               value={currentPassword}
@@ -98,7 +103,14 @@ export default function AccountSettingsScreen() {
                 {success}
               </Text>
             ) : null}
-            <Button title={saving ? 'Updating…' : 'Change password'} disabled={saving} onPress={changePassword} />
+            <View style={{ alignSelf: 'flex-start' }}>
+              <Button
+                title={saving ? 'Updating…' : 'Change password'}
+                disabled={saving}
+                onPress={changePassword}
+                style={{ paddingVertical: 8, paddingHorizontal: 16 }}
+              />
+            </View>
           </View>
         </Card>
       </ScrollView>

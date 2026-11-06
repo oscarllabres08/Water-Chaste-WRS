@@ -1,15 +1,14 @@
-import { compressImageForUpload } from './compressImageForUpload';
+import { compressImageForUpload, imageUploadPresets } from './compressImageForUpload';
 import { BUCKET } from './format';
 import { supabase } from './supabase';
 
 export async function uploadProductImage(businessId: string, file: File): Promise<string> {
-  const prepared = await compressImageForUpload(file);
-  const isGif = prepared.type === 'image/gif';
-  const ext = isGif ? 'gif' : 'jpg';
-  const path = `${businessId}/product/${Date.now()}.${ext}`;
+  const prepared = await compressImageForUpload(file, imageUploadPresets.product);
+  const path = `${businessId}/product/${Date.now()}.jpg`;
   const { error } = await supabase.storage.from(BUCKET).upload(path, prepared, {
     upsert: true,
-    contentType: isGif ? 'image/gif' : 'image/jpeg',
+    contentType: 'image/jpeg',
+    cacheControl: '3600',
   });
   if (error) throw error;
   return path;

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
 
 import { useAuth } from '../auth/AuthProvider';
@@ -156,12 +156,6 @@ const PAGE_TITLES: { match: (path: string) => boolean; label: string }[] = [
   { match: (p) => p.startsWith('/settings'), label: 'Settings' },
 ];
 
-function initials(name: string) {
-  const parts = name.trim().split(/\s+/).filter(Boolean);
-  if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
-  return (parts[0]?.[0] ?? 'W').toUpperCase();
-}
-
 function readStoreOpen() {
   try {
     return localStorage.getItem(STORE_OPEN_KEY) !== 'closed';
@@ -172,7 +166,7 @@ function readStoreOpen() {
 
 export function AdminLayout() {
   const { user, profile, businessId, signOut, isStoreOwner } = useAuth();
-  const { darkMode, setDarkMode } = useTheme();
+  const { darkMode, toggleDarkMode } = useTheme();
   const navigate = useNavigate();
   const location = useLocation();
   const [pendingOrders, setPendingOrders] = useState(0);
@@ -181,13 +175,15 @@ export function AdminLayout() {
   const [settingsOpen, setSettingsOpen] = useState(location.pathname.startsWith('/settings'));
   const [storeOpen, setStoreOpen] = useState(readStoreOpen);
   const [storeMenuOpen, setStoreMenuOpen] = useState(false);
+  const settingsMenuRef = useRef<HTMLDivElement>(null);
   const { visibleOrders, dismissBanner } = usePendingOrderReminder(businessId);
 
   const wideMain =
     location.pathname === '/pos' ||
     location.pathname === '/inventory' ||
     location.pathname === '/sales' ||
-    location.pathname === '/containers';
+    location.pathname === '/containers' ||
+    location.pathname.startsWith('/settings');
 
   const settingsSection = new URLSearchParams(location.search).get('section');
   const pageLabel = PAGE_TITLES.find((item) => item.match(location.pathname))?.label ?? 'Workspace';
@@ -196,6 +192,15 @@ export function AdminLayout() {
     setNavOpen(false);
     if (location.pathname.startsWith('/settings')) setSettingsOpen(true);
   }, [location.pathname]);
+
+  useLayoutEffect(() => {
+    if (!settingsOpen) return;
+    const node = settingsMenuRef.current;
+    const scroller = node?.closest('.admin-sidebar-body');
+    if (!node || !(scroller instanceof HTMLElement)) return;
+    const extra = node.getBoundingClientRect().bottom - scroller.getBoundingClientRect().bottom;
+    if (extra > 0) scroller.scrollTop += extra + 12;
+  }, [settingsOpen, navOpen]);
 
   useEffect(() => {
     if (!navOpen) return;
@@ -261,7 +266,6 @@ export function AdminLayout() {
   }
 
   const displayName = profile?.display_name?.trim() || user?.email || 'Store owner';
-  const userInitial = useMemo(() => initials(displayName), [displayName]);
   const todayLabel = new Date().toLocaleDateString('en-US', {
     weekday: 'long',
     month: 'short',
@@ -386,7 +390,7 @@ export function AdminLayout() {
               </button>
 
               {settingsOpen ? (
-                <div className="admin-subnav">
+                <div className="admin-subnav" ref={settingsMenuRef}>
                   <NavLink
                     to="/settings?section=general"
                     className={() =>
@@ -416,15 +420,19 @@ export function AdminLayout() {
                   >
                     Notification
                   </NavLink>
-                  <label className="admin-subnav-toggle">
-                    <span>Dark mode {darkMode ? 'On' : 'Off'}</span>
-                    <input
-                      type="checkbox"
-                      checked={darkMode}
-                      onChange={(e) => setDarkMode(e.target.checked)}
-                      aria-label="Dark mode"
-                    />
-                  </label>
+                  <button
+                    type="button"
+                    className={`admin-subnav-toggle${darkMode ? ' on' : ''}`}
+                    role="switch"
+                    aria-checked={darkMode}
+                    aria-label={darkMode ? 'Dark mode on' : 'Dark mode off'}
+                    onClick={toggleDarkMode}
+                  >
+                    <span>Dark mode</span>
+                    <span className="theme-switch" aria-hidden>
+                      <span className="theme-switch-knob" />
+                    </span>
+                  </button>
                 </div>
               ) : null}
             </nav>
@@ -432,9 +440,6 @@ export function AdminLayout() {
 
           <div className="admin-sidebar-foot">
             <div className="admin-user-row">
-              <span className="admin-user-avatar" aria-hidden>
-                {userInitial}
-              </span>
               <div className="admin-user-meta">
                 <span className="admin-user">{displayName}</span>
                 <span className="admin-user-role">{isStoreOwner ? 'Master admin' : 'Admin'}</span>
@@ -459,9 +464,6 @@ export function AdminLayout() {
               {todayLabel}
             </time>
             <AdminNotificationsButton placement="desktop" />
-            <span className="admin-topbar-avatar" aria-hidden>
-              {userInitial}
-            </span>
           </div>
         </header>
         <main className="admin-main">

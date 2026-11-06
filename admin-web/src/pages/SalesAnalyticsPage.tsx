@@ -10,6 +10,7 @@ import { useAuth } from '../auth/AuthProvider';
 import {
   downloadDaySpreadsheet,
   downloadMonthSpreadsheet,
+  downloadRangeSpreadsheet,
   downloadYearSpreadsheet,
 } from '../lib/exportSalesSpreadsheet';
 
@@ -17,9 +18,13 @@ import { money } from '../lib/format';
 
 import {
 
+  calendarWeekBounds,
+
   fetchDayExportPayload,
 
   fetchMonthExportPayload,
+
+  fetchRangeExportPayload,
 
   fetchYearExportPayload,
 
@@ -33,18 +38,17 @@ import {
 
   type SalesDashboardData,
 
-  type SalesDisplayMode,
-
 } from '../lib/salesReportData';
 
 
 
-type DisplayGranularity = 'day' | 'month' | 'year';
+type SalesPeriod = 'today' | 'week' | 'month' | 'year' | 'date';
 
-const DISPLAY_GRANULARITY: { id: DisplayGranularity; label: string }[] = [
-  { id: 'day', label: 'Day' },
-  { id: 'month', label: 'Month' },
-  { id: 'year', label: 'Year' },
+const SALES_PERIODS: { id: Exclude<SalesPeriod, 'date'>; label: string }[] = [
+  { id: 'today', label: 'Today' },
+  { id: 'week', label: 'This Week' },
+  { id: 'month', label: 'This Month' },
+  { id: 'year', label: 'This Year' },
 ];
 
 
@@ -77,7 +81,7 @@ export function SalesAnalyticsPage() {
 
   const { businessId } = useAuth();
 
-  const [displayGranularity, setDisplayGranularity] = useState<DisplayGranularity>('month');
+  const [period, setPeriod] = useState<SalesPeriod>('today');
 
   const [selectedDate, setSelectedDate] = useState(() => toDateInputValue(new Date()));
 
@@ -119,11 +123,6 @@ export function SalesAnalyticsPage() {
 
 
 
-  const analyticsMode: SalesDisplayMode =
-    displayGranularity === 'day' ? 'today' : displayGranularity === 'month' ? 'day' : 'month';
-
-
-
   const load = useCallback(async () => {
 
     if (!businessId) return;
@@ -132,7 +131,7 @@ export function SalesAnalyticsPage() {
 
     try {
 
-      const dash = await loadSalesAnalyticsView(businessId, analyticsMode, filterYear, filterMonth, filterDay);
+      const dash = await loadSalesAnalyticsView(businessId, period, filterYear, filterMonth, filterDay);
 
       setData(dash);
       setRecentVisible(RECENT_SALES_PAGE);
@@ -143,7 +142,7 @@ export function SalesAnalyticsPage() {
 
     }
 
-  }, [businessId, analyticsMode, filterYear, filterMonth, filterDay]);
+  }, [businessId, period, filterYear, filterMonth, filterDay]);
 
 
 
@@ -154,41 +153,34 @@ export function SalesAnalyticsPage() {
   }, [load]);
 
   const filterLabel = useMemo(() => {
+    const now = new Date();
+    const longDate = (d: Date) =>
+      d.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
 
-    if (displayGranularity === 'day') {
-      return new Date(filterYear, filterMonth, filterDay).toLocaleDateString('en-US', {
-        weekday: 'long',
-        month: 'long',
-        day: 'numeric',
-        year: 'numeric',
-      });
+    if (period === 'today') return `Today · ${longDate(now)}`;
+    if (period === 'date') return longDate(new Date(filterYear, filterMonth, filterDay));
+    if (period === 'week') {
+      const { from, to } = calendarWeekBounds(now);
+      const start = from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+      const end = to.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+      return `This Week · ${start} – ${end}`;
     }
-
-    if (displayGranularity === 'month') {
-
-      return new Date(filterYear, filterMonth, 1).toLocaleDateString('en-US', { month: 'long', year: 'numeric' });
-
+    if (period === 'month') {
+      return `This Month · ${now.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}`;
     }
-
-    return String(filterYear);
-
-  }, [displayGranularity, filterYear, filterMonth, filterDay]);
+    return `This Year · ${now.getFullYear()}`;
+  }, [period, filterYear, filterMonth, filterDay]);
 
   const pickerLabel = useMemo(() => {
-    if (displayGranularity === 'day') {
-      return new Date(filterYear, filterMonth, filterDay).toLocaleDateString('en-US', {
-        month: 'short',
-        day: 'numeric',
-        year: 'numeric',
-      });
-    }
-    if (displayGranularity === 'month') {
-      return new Date(filterYear, filterMonth, 1).toLocaleDateString('en-US', { month: 'short', year: 'numeric' });
-    }
-    return String(filterYear);
-  }, [displayGranularity, filterYear, filterMonth, filterDay]);
+    if (period !== 'date') return 'Select date';
+    return new Date(filterYear, filterMonth, filterDay).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  }, [period, filterYear, filterMonth, filterDay]);
 
-  const chartSlotWidth = displayGranularity === 'year' ? 52 : 44;
+  const chartSlotWidth = period === 'year' ? 52 : period === 'month' ? 36 : period === 'week' ? 72 : 88;
 
 
 
@@ -213,16 +205,34 @@ export function SalesAnalyticsPage() {
     setExporting(true);
     setExportError(null);
     try {
-      if (displayGranularity === 'day') {
-        const payload = await fetchDayExportPayload(businessId, filterYear, filterMonth, filterDay);
-        await downloadDaySpreadsheet(payload, `water-chaste-sales-${selectedDate}.xlsx`);
-      } else if (displayGranularity === 'month') {
-        const payload = await fetchMonthExportPayload(businessId, filterYear, filterMonth);
-        const name = `water-chaste-sales-${filterYear}-${String(filterMonth + 1).padStart(2, '0')}.xlsx`;
+      const now = new Date();
+      if (period === 'today' || period === 'date') {
+        const year = period === 'today' ? now.getFullYear() : filterYear;
+        const month = period === 'today' ? now.getMonth() : filterMonth;
+        const day = period === 'today' ? now.getDate() : filterDay;
+        const payload = await fetchDayExportPayload(businessId, year, month, day);
+        const stamp = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+        await downloadDaySpreadsheet(payload, `water-chaste-sales-${stamp}.xlsx`);
+      } else if (period === 'week') {
+        const { from, to } = calendarWeekBounds(now);
+        const start = from.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+        const end = to.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const payload = await fetchRangeExportPayload(
+          businessId,
+          from,
+          to,
+          'week',
+          'Water Chaste — Weekly Sales Report',
+          `${start} – ${end}`
+        );
+        await downloadRangeSpreadsheet(payload, `water-chaste-sales-week-${toDateInputValue(from)}.xlsx`);
+      } else if (period === 'month') {
+        const payload = await fetchMonthExportPayload(businessId, now.getFullYear(), now.getMonth());
+        const name = `water-chaste-sales-${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}.xlsx`;
         await downloadMonthSpreadsheet(payload, name);
       } else {
-        const payload = await fetchYearExportPayload(businessId, filterYear);
-        await downloadYearSpreadsheet(payload, `water-chaste-sales-${filterYear}.xlsx`);
+        const payload = await fetchYearExportPayload(businessId, now.getFullYear());
+        await downloadYearSpreadsheet(payload, `water-chaste-sales-${now.getFullYear()}.xlsx`);
       }
     } catch (e) {
       setExportError(e instanceof Error ? e.message : 'Export failed. Check your internet connection and try again.');
@@ -241,24 +251,23 @@ export function SalesAnalyticsPage() {
 
       <div className="sales-toolbar card card-flat">
         <div className="sales-toolbar-block">
-          <span className="sales-toolbar-heading">Display sales</span>
           <div className="sales-toolbar-controls">
             <div className="sales-period-tabs" role="tablist" aria-label="Sales display period">
-              {DISPLAY_GRANULARITY.map((p) => (
+              {SALES_PERIODS.map((p) => (
                 <button
                   key={p.id}
                   type="button"
                   role="tab"
-                  aria-selected={displayGranularity === p.id}
-                  className={`pos-category-tab${displayGranularity === p.id ? ' active' : ''}`}
-                  onClick={() => setDisplayGranularity(p.id)}
+                  aria-selected={period === p.id}
+                  className={`pos-category-tab${period === p.id ? ' active' : ''}`}
+                  onClick={() => setPeriod(p.id)}
                 >
                   {p.label}
                 </button>
               ))}
             </div>
             <label
-              className="sales-date-picker-btn sales-date-picker-btn--inline"
+              className={`sales-date-picker-btn sales-date-picker-btn--inline${period === 'date' ? ' active' : ''}`}
               title={pickerLabel}
               htmlFor="sales-display-date"
               onClick={() => openDatePicker()}
@@ -272,7 +281,7 @@ export function SalesAnalyticsPage() {
               <span className="sales-date-picker-icon" aria-hidden>
                 <CalendarIcon />
               </span>
-              <strong className="sales-date-picker-value">{pickerLabel}</strong>
+              <span className="sales-date-picker-value">{pickerLabel}</span>
               <input
                 id="sales-display-date"
                 ref={dateInputRef}
@@ -280,7 +289,9 @@ export function SalesAnalyticsPage() {
                 className="sales-date-input-overlay"
                 value={selectedDate}
                 onChange={(e) => {
-                  if (e.target.value) setSelectedDate(e.target.value);
+                  if (!e.target.value) return;
+                  setSelectedDate(e.target.value);
+                  setPeriod('date');
                 }}
                 aria-label="Select date to display sales"
               />
@@ -295,9 +306,8 @@ export function SalesAnalyticsPage() {
             </button>
           </div>
           <p className="sales-filter-summary">
-            Showing <strong>{filterLabel}</strong>
-            {' · '}
-            Export downloads the same sales shown above
+            <span className="sales-filter-current">{filterLabel}</span>
+            <span className="sales-filter-note">Export uses this period</span>
           </p>
         </div>
       </div>
@@ -340,15 +350,13 @@ export function SalesAnalyticsPage() {
 
                 {filterLabel}
 
-                {displayGranularity === 'day'
-
-                  ? ' · Last 7 days'
-
-                  : displayGranularity === 'month'
-
+                {period === 'week'
+                  ? ' · 7 days'
+                  : period === 'month'
                     ? ` · ${data.timeline.length} days`
-
-                    : ' · 12 months'}
+                    : period === 'year'
+                      ? ' · 12 months'
+                      : ''}
 
               </p>
 
@@ -440,65 +448,56 @@ export function SalesAnalyticsPage() {
 
                     ) : (
 
-                      data.recentSales.slice(0, recentVisible).map((r) => (
-
-                        <tr
-                          key={r.id}
-                          className="sales-row-clickable"
-                          tabIndex={0}
-                          role="button"
-                          onClick={() => setSelectedSale(r)}
-                          onKeyDown={(e) => {
-                            if (e.key === 'Enter' || e.key === ' ') {
-                              e.preventDefault();
-                              setSelectedSale(r);
-                            }
-                          }}
-                        >
-
-                          <td className="sales-col-customer">{r.customerName}</td>
-
-                          <td className="sales-col-datetime">
-
-                            {r.at.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })},{' '}
-
-                            {r.at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
-
-                          </td>
-
-                          <td className="sales-col-product">{r.productLabel}</td>
-
-                          <td className="sales-col-type">
-
-                            <span className={`sales-pill ${r.type === 'online' ? 'online' : 'walk'}`}>
-
-                              {r.type === 'online' ? 'Online' : 'Walk-in'}
-
-                            </span>
-
-                          </td>
-
-                          <td className="sales-col-payment">
-
-                            <span className={`sales-pill ${r.paymentMethod === 'GCash' ? 'gcash' : r.paymentMethod === 'Cash' ? 'cash' : 'neutral'}`}>
-
-                              {r.paymentMethod}
-
-                            </span>
-
-                          </td>
-
-                          <td className="sales-col-amount">{money(r.amount)}</td>
-
-                          <td className="sales-col-status">
-
-                            <span className={`sales-pill ${r.status}`}>{r.status === 'paid' ? 'Paid' : 'Unpaid'}</span>
-
-                          </td>
-
-                        </tr>
-
-                      ))
+                      data.recentSales.slice(0, recentVisible).flatMap((r, index, rows) => {
+                        const day = r.at.toDateString();
+                        const prevDay = index > 0 ? rows[index - 1].at.toDateString() : '';
+                        const nodes = [];
+                        if (day !== prevDay) {
+                          nodes.push(
+                            <tr key={`date-${day}`} className="sales-date-row">
+                              <td colSpan={7}>
+                                {r.at.toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
+                              </td>
+                            </tr>
+                          );
+                        }
+                        nodes.push(
+                          <tr
+                            key={r.id}
+                            className="sales-row-clickable"
+                            tabIndex={0}
+                            role="button"
+                            onClick={() => setSelectedSale(r)}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter' || e.key === ' ') {
+                                e.preventDefault();
+                                setSelectedSale(r);
+                              }
+                            }}
+                          >
+                            <td className="sales-col-customer">{r.customerName}</td>
+                            <td className="sales-col-datetime">
+                              {r.at.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                            </td>
+                            <td className="sales-col-product">{r.productLabel}</td>
+                            <td className="sales-col-type">
+                              <span className={`sales-pill ${r.type === 'online' ? 'online' : 'walk'}`}>
+                                {r.type === 'online' ? 'Online' : 'Walk-in'}
+                              </span>
+                            </td>
+                            <td className="sales-col-payment">
+                              <span className={`sales-pill ${r.paymentMethod === 'GCash' ? 'gcash' : r.paymentMethod === 'Cash' ? 'cash' : 'neutral'}`}>
+                                {r.paymentMethod}
+                              </span>
+                            </td>
+                            <td className="sales-col-amount">{money(r.amount)}</td>
+                            <td className="sales-col-status">
+                              <span className={`sales-pill ${r.status}`}>{r.status === 'paid' ? 'Paid' : 'Unpaid'}</span>
+                            </td>
+                          </tr>
+                        );
+                        return nodes;
+                      })
 
                     )}
 

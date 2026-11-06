@@ -18,6 +18,7 @@ import { markOrderViewed } from '../lib/viewedOrders';
 type CustomerRow = {
   id: string;
   name: string;
+  username: string;
   avatarPath: string | null;
   phone: string;
   address: string;
@@ -135,6 +136,7 @@ export function CustomersPage() {
   const [containerFilter, setContainerFilter] = useState<ContainerFilter>('all');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [detailsFor, setDetailsFor] = useState<CustomerRow | null>(null);
   const [historyFor, setHistoryFor] = useState<CustomerRow | null>(null);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
@@ -159,7 +161,7 @@ export function CustomersPage() {
 
     const { data: customers, error: custErr } = await supabase
       .from('profiles')
-      .select('user_id,display_name,phone,address,avatar_path')
+      .select('user_id,display_name,username,phone,address,avatar_path')
       .eq('role', 'customer')
       .order('created_at', { ascending: false })
       .limit(400);
@@ -341,10 +343,12 @@ export function CustomersPage() {
       const p = c as {
         user_id: string;
         display_name: string | null;
+        username: string | null;
         phone: string | null;
         address: string | null;
         avatar_path: string | null;
       };
+      const username = p.username?.trim() || '';
       const displayName = p.display_name?.trim() || 'Customer';
       const nameKey = normalizeCustomerName(displayName);
       if (!nameKey) continue;
@@ -355,6 +359,7 @@ export function CustomersPage() {
         byName.set(nameKey, {
           id: p.user_id,
           name: displayName,
+          username,
           avatarPath: p.avatar_path ?? null,
           phone: p.phone?.trim() || '—',
           address: p.address?.trim() || '—',
@@ -380,6 +385,7 @@ export function CustomersPage() {
       existing.hasUnpaidUtang = existing.hasUnpaidUtang || (a?.hasUnpaidUtang ?? false);
       existing.containersOutstanding += Math.max(0, bal?.outstanding_count ?? 0);
       if (a?.last && (!existing.lastOrder || a.last > existing.lastOrder)) existing.lastOrder = a.last;
+      if (!existing.username && username) existing.username = username;
       if (existing.phone === '—' && p.phone?.trim()) existing.phone = p.phone.trim();
       if (existing.address === '—' && p.address?.trim()) existing.address = p.address.trim();
       if (!existing.avatarPath && p.avatar_path) existing.avatarPath = p.avatar_path;
@@ -422,6 +428,7 @@ export function CustomersPage() {
       list.push({
         id: posCustomerRowId(key),
         name: pos.displayName,
+        username: '',
         avatarPath: null,
         phone: 'Walk-in POS',
         address: '—',
@@ -451,6 +458,7 @@ export function CustomersPage() {
         list.push({
           id: posCustomerRowId(key),
           name: row.display_name?.trim() || key,
+          username: '',
           avatarPath: null,
           phone: 'Walk-in POS',
           address: '—',
@@ -478,6 +486,7 @@ export function CustomersPage() {
           .split(/\s+/)
           .map((w) => (w ? w.charAt(0).toUpperCase() + w.slice(1) : w))
           .join(' '),
+        username: '',
         avatarPath: null,
         phone: 'Walk-in POS',
         address: '—',
@@ -740,7 +749,9 @@ export function CustomersPage() {
       list = list.filter(
         (r) =>
           r.name.toLowerCase().includes(q) ||
+          r.username.toLowerCase().includes(q) ||
           r.phone.toLowerCase().includes(q) ||
+          r.address.toLowerCase().includes(q) ||
           (r.containerIdentifierNotes ?? '').toLowerCase().includes(q)
       );
     }
@@ -759,7 +770,7 @@ export function CustomersPage() {
       <div className="customer-toolbar card card-flat">
         <label className="customer-search" htmlFor="q">
           <span>Search</span>
-          <input id="q" placeholder="Name or phone" value={query} onChange={(e) => setQuery(e.target.value)} />
+          <input id="q" placeholder="Name, username, phone, or address" value={query} onChange={(e) => setQuery(e.target.value)} />
         </label>
         <div className="customer-filter-group">
           <span>Payment</span>
@@ -796,12 +807,10 @@ export function CustomersPage() {
       <div className="card">
         {loading ? <p className="muted-block">Loading…</p> : null}
         <div className="table-wrap">
-          <table className="data-table">
+          <table className="data-table customer-list-table">
             <thead>
               <tr>
                 <th>Customer</th>
-                <th>Orders</th>
-                <th>Spent</th>
                 <th>Payment</th>
                 <th>Containers</th>
                 <th />
@@ -832,9 +841,7 @@ export function CustomersPage() {
                       </div>
                     </div>
                   </td>
-                  <td>{r.orderCount}</td>
-                  <td>{money(r.totalSpent)}</td>
-                  <td>
+                  <td data-label="Payment">
                     {r.unpaidDeliveredCount > 0 ? (
                       <span className="chip pending">
                         {r.unpaidDeliveredCount} unpaid · {money(r.unpaidDeliveredTotal)}
@@ -847,7 +854,7 @@ export function CustomersPage() {
                       '—'
                     )}
                   </td>
-                  <td>
+                  <td data-label="Containers">
                     <ContainerReturnPanel
                       customerId={r.id}
                       customerName={r.name}
@@ -861,6 +868,9 @@ export function CustomersPage() {
                   </td>
                   <td>
                     <div className="row-actions">
+                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDetailsFor(r)}>
+                        Details
+                      </button>
                       <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openHistory(r)}>
                         Order history
                       </button>
@@ -877,6 +887,90 @@ export function CustomersPage() {
         </div>
       </div>
 
+      {detailsFor ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setDetailsFor(null)}>
+          <div className="modal-card customer-details-modal" role="dialog" aria-labelledby="customer-details-title" onClick={(e) => e.stopPropagation()}>
+            <div className="customer-details-head">
+              <span className="customer-list-avatar customer-details-avatar" aria-hidden>
+                {publicWrsAssetUrl(supabase, detailsFor.avatarPath) ? (
+                  <img src={publicWrsAssetUrl(supabase, detailsFor.avatarPath) ?? ''} alt="" />
+                ) : (
+                  <span className="customer-list-avatar-fallback">{(detailsFor.name.trim()[0] ?? 'C').toUpperCase()}</span>
+                )}
+              </span>
+              <div>
+                <h2 id="customer-details-title" className="card-title">
+                  {detailsFor.name}
+                </h2>
+                <p className="muted-block customer-details-kind">
+                  {detailsFor.isPosOnly ? 'Walk-in POS' : 'Registered customer'}
+                </p>
+              </div>
+            </div>
+            <dl className="customer-details-list">
+              <div>
+                <dt>Name</dt>
+                <dd>{detailsFor.name}</dd>
+              </div>
+              <div>
+                <dt>Username</dt>
+                <dd>{detailsFor.username || '—'}</dd>
+              </div>
+              <div>
+                <dt>Phone</dt>
+                <dd>{detailsFor.phone}</dd>
+              </div>
+              <div>
+                <dt>Address</dt>
+                <dd>{detailsFor.address}</dd>
+              </div>
+              <div>
+                <dt>Payment</dt>
+                <dd>
+                  {detailsFor.unpaidDeliveredCount > 0
+                    ? `${detailsFor.unpaidDeliveredCount} unpaid · ${money(detailsFor.unpaidDeliveredTotal)}`
+                    : detailsFor.hasUnpaidUtang
+                      ? 'Unpaid utang'
+                      : detailsFor.orderCount > 0
+                        ? 'Paid'
+                        : '—'}
+                </dd>
+              </div>
+              <div>
+                <dt>Containers borrowed</dt>
+                <dd>{detailsFor.containersOutstanding}</dd>
+              </div>
+              <div>
+                <dt>Last order</dt>
+                <dd>{detailsFor.lastOrder ? new Date(detailsFor.lastOrder).toLocaleString() : '—'}</dd>
+              </div>
+              {detailsFor.containerIdentifierNotes ? (
+                <div>
+                  <dt>Container notes</dt>
+                  <dd>{detailsFor.containerIdentifierNotes}</dd>
+                </div>
+              ) : null}
+            </dl>
+            <div className="row-actions">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                onClick={() => {
+                  const row = detailsFor;
+                  setDetailsFor(null);
+                  void openHistory(row);
+                }}
+              >
+                Order history
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDetailsFor(null)}>
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {historyFor ? (
         <div className="modal-backdrop" role="presentation" onClick={closeHistory}>
           <div className="modal-card customer-history-modal" role="dialog" onClick={(e) => e.stopPropagation()}>
@@ -884,37 +978,46 @@ export function CustomersPage() {
             {historyLoading ? <p className="muted-block">Loading…</p> : null}
             {!historyLoading && history.length === 0 ? <p className="muted-block">No orders yet.</p> : null}
             <ul className="history-list customer-history-list">
-              {history.map((h) => {
+              {history.map((h, index) => {
                 const entryKey = historyEntryKey(h);
                 const markingPaid = paymentBusyKey === entryKey;
+                const day = new Date(h.created_at).toDateString();
+                const prevDay = index > 0 ? new Date(history[index - 1].created_at).toDateString() : '';
+                const showDate = day !== prevDay;
                 return (
                   <li key={entryKey} className="customer-history-row">
+                    {showDate ? (
+                      <div className="customer-history-date">
+                        {new Date(h.created_at).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })}
+                      </div>
+                    ) : null}
                     <div className={`customer-history-item${!h.payment_settled ? ' customer-history-item--unpaid' : ''}`}>
                       <button type="button" className="customer-history-item-main" onClick={() => setSelectedEntry(h)}>
-                        <div className="customer-history-item-top">
-                          <strong>{new Date(h.created_at).toLocaleString()}</strong>
-                          <span className="chip">{h.channelLabel}</span>
-                        </div>
-                        <div className="customer-history-item-meta">
-                          {money(h.total)} · {paymentMethodLabel(h)} ·{' '}
-                          {h.payment_settled ? (
-                            <span className="chip ok">Paid</span>
-                          ) : (
-                            <span className="chip pending">Unpaid</span>
-                          )}
-                        </div>
+                        <span className="customer-history-time">
+                          {new Date(h.created_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })}
+                        </span>
+                        <span className="customer-history-channel">{h.channelLabel}</span>
+                        <span className="customer-history-amount">{money(h.total)}</span>
+                        <span className="customer-history-pay">{paymentMethodLabel(h)}</span>
+                        {h.payment_settled ? (
+                          <span className="chip ok">Paid</span>
+                        ) : (
+                          <span className="chip pending">Unpaid</span>
+                        )}
                       </button>
                       {!h.payment_settled ? (
-                        <div className="customer-history-item-actions">
-                          <button
-                            type="button"
-                            className="btn btn-primary btn-sm customer-history-mark-paid"
-                            disabled={paymentBusyKey != null}
-                            onClick={() => void setEntryPaymentSettled(h, true)}
-                          >
-                            {markingPaid ? 'Saving…' : 'Mark as paid'}
-                          </button>
-                        </div>
+                        <button
+                          type="button"
+                          className="btn btn-primary btn-sm customer-history-mark-paid"
+                          disabled={paymentBusyKey != null}
+                          onClick={() => void setEntryPaymentSettled(h, true)}
+                        >
+                          {markingPaid ? '…' : 'Paid'}
+                        </button>
                       ) : null}
                     </div>
                   </li>

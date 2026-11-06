@@ -4,6 +4,8 @@ import * as Device from 'expo-device';
 import { AppState, type AppStateStatus, Platform } from 'react-native';
 
 import { supabase } from '../lib/supabase';
+import { playNotificationSound } from '../lib/playNotificationSound';
+import { setNotificationRuntimePrefs } from '../lib/notificationRuntime';
 import { useAuth } from './AuthProvider';
 
 type Ctx = {
@@ -110,6 +112,17 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   }, [user?.id]);
 
   useEffect(() => {
+    const sub = Notifications.addNotificationReceivedListener((notification) => {
+      const data = notification.request.content.data as Record<string, unknown> | undefined;
+      if (data?.soundOnly === '1') return;
+      if (AppState.currentState !== 'active') return;
+      if (!prefsRef.current.notificationsEnabled || !prefsRef.current.soundEnabled) return;
+      playNotificationSound();
+    });
+    return () => sub.remove();
+  }, []);
+
+  useEffect(() => {
     if (!user?.id) return;
     const sub = AppState.addEventListener('change', (next: AppStateStatus) => {
       if (next === 'active') void ensurePushTokenRegistered();
@@ -131,13 +144,17 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
       if (!alive) return;
       if (error) {
         if (__DEV__) console.warn('[NotificationsProvider] profile prefs:', error.message);
-        prefsRef.current = { notificationsEnabled: true, soundEnabled: true };
+        const fallback = { notificationsEnabled: true, soundEnabled: true };
+        prefsRef.current = fallback;
+        setNotificationRuntimePrefs(fallback);
         return;
       }
-      prefsRef.current = {
+      const next = {
         notificationsEnabled: (data as any)?.notifications_enabled ?? true,
         soundEnabled: (data as any)?.notification_sound_enabled ?? true,
       };
+      prefsRef.current = next;
+      setNotificationRuntimePrefs(next);
     }
     loadPrefs();
     const channel = supabase
@@ -167,16 +184,19 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
             // In-app toast (shows on any page). Auto dismiss after 3s.
             const rowData =
               n.data && typeof n.data === 'object' && !Array.isArray(n.data) ? (n.data as Record<string, unknown>) : {};
-            setToast({
-              id: id || String(Date.now()),
-              title: String(n.title ?? 'Notification'),
-              body: String(n.body ?? ''),
-              data: {
-                orderId: (n.order_id as string | undefined) ?? (rowData.orderId as string | undefined),
-              } as Record<string, unknown>,
-            });
-            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
-            toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+            if (prefsRef.current.notificationsEnabled) {
+              setToast({
+                id: id || String(Date.now()),
+                title: String(n.title ?? 'Notification'),
+                body: String(n.body ?? ''),
+                data: {
+                  orderId: (n.order_id as string | undefined) ?? (rowData.orderId as string | undefined),
+                } as Record<string, unknown>,
+              });
+              if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+              toastTimerRef.current = setTimeout(() => setToast(null), 3000);
+              if (prefsRef.current.soundEnabled) playNotificationSound();
+            }
           }
           void refresh();
         }

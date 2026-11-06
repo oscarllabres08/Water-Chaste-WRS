@@ -5,9 +5,18 @@ loadEnv(process.cwd());
 
 const base = require('./app.json');
 
-// Baked at build time for EAS (see eas.json env) and local .env for dev.
-const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || '';
-const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || '';
+// Always baked into the binary. Env can override, but a missing or old key
+// must not ship an APK that closes on open.
+const WATER_CHASTE_URL = 'https://hjvwwxdyyugjchkeolyp.supabase.co';
+const WATER_CHASTE_ANON_KEY = 'sb_publishable_syjSQ1DOnVQndCcAzDLRgA_icj7QHx2';
+const RETIRED_HOST = 'nigvimeeqglqvgvtnbfy';
+
+let supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL?.trim() || '';
+let supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY?.trim() || '';
+if (!supabaseUrl || !supabaseAnonKey || supabaseUrl.includes(RETIRED_HOST)) {
+  supabaseUrl = WATER_CHASTE_URL;
+  supabaseAnonKey = WATER_CHASTE_ANON_KEY;
+}
 
 module.exports = () => ({
   expo: {

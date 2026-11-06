@@ -382,7 +382,20 @@ async function fetchRange(businessId: string, from: Date, to: Date): Promise<{ o
   };
 }
 
-export type SalesDisplayMode = 'today' | 'day' | 'month' | 'year';
+export type SalesDisplayMode = 'today' | 'week' | 'month' | 'year' | 'date';
+
+/** Monday–Sunday week that contains `ref`. */
+export function calendarWeekBounds(ref = new Date()): { from: Date; to: Date } {
+  const from = new Date(ref);
+  const weekday = from.getDay();
+  const mondayOffset = weekday === 0 ? -6 : 1 - weekday;
+  from.setDate(from.getDate() + mondayOffset);
+  from.setHours(0, 0, 0, 0);
+  const to = new Date(from);
+  to.setDate(from.getDate() + 6);
+  to.setHours(23, 59, 59, 999);
+  return { from, to };
+}
 
 export type SalesOverviewMonth = {
   timeline: TimelinePoint[];
@@ -413,7 +426,25 @@ async function loadRangeDashboard(
   return data;
 }
 
-/** KPIs + chart for today / day / month / year display filters. */
+function dayChartLabel(pts: TimelinePoint[]): TimelinePoint[] {
+  return pts.map((pt) => ({
+    ...pt,
+    label: new Date(`${pt.key}T12:00:00`).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+  }));
+}
+
+function weekChartLabel(pts: TimelinePoint[]): TimelinePoint[] {
+  return pts.map((pt) => ({
+    ...pt,
+    label: new Date(`${pt.key}T12:00:00`).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' }),
+  }));
+}
+
+function monthDayChartLabel(pts: TimelinePoint[]): TimelinePoint[] {
+  return pts.map((pt) => ({ ...pt, label: String(Number(pt.key.slice(8, 10))) }));
+}
+
+/** KPIs + chart for Today, This Week, This Month, This Year, or one selected date. */
 export async function loadSalesAnalyticsView(
   businessId: string,
   mode: SalesDisplayMode,
@@ -421,75 +452,40 @@ export async function loadSalesAnalyticsView(
   monthIndex: number,
   day = 1
 ): Promise<SalesDashboardData> {
-  if (mode === 'today') {
-    const ref = new Date(year, monthIndex, day);
-    const { from, to } = dayBounds(year, monthIndex, day);
+  const now = new Date();
+
+  if (mode === 'today' || mode === 'date') {
+    const y = mode === 'today' ? now.getFullYear() : year;
+    const m = mode === 'today' ? now.getMonth() : monthIndex;
+    const d = mode === 'today' ? now.getDate() : day;
+    const ref = new Date(y, m, d);
+    const { from, to } = dayBounds(y, m, d);
     const prevRef = new Date(ref);
     prevRef.setDate(prevRef.getDate() - 1);
     const prev = dayBounds(prevRef.getFullYear(), prevRef.getMonth(), prevRef.getDate());
-    const weekRange = weekEndingOn(ref);
-
-    const productCats = await loadProductCategories(businessId);
-    const [currentDay, previousDay, weekData] = await Promise.all([
-      fetchRange(businessId, from, to),
-      fetchRange(businessId, prev.from, prev.to),
-      fetchRange(businessId, weekRange.from, weekRange.to),
-    ]);
-
-    const data = aggregate(currentDay.orders, currentDay.pos, productCats, 'week', from, to);
-    const weekAgg = aggregate(weekData.orders, weekData.pos, productCats, 'week', weekRange.from, weekRange.to);
-    data.timeline = weekAgg.timeline;
-    const prevAgg = aggregate(previousDay.orders, previousDay.pos, productCats, 'week', prev.from, prev.to);
-    data.prevTotalSales = prevAgg.totalSales;
-    data.prevTotalOrders = prevAgg.totalOrderCount;
-    return data;
+    return loadRangeDashboard(businessId, from, to, 'week', prev.from, prev.to, dayChartLabel);
   }
 
-  if (mode === 'day') {
-    const { from, to } = monthBounds(year, monthIndex);
-    const prev =
-      monthIndex === 0 ? monthBounds(year - 1, 11) : monthBounds(year, monthIndex - 1);
-    return loadRangeDashboard(businessId, from, to, 'month', prev.from, prev.to, (pts) =>
-      pts.map((pt) => ({ ...pt, label: String(Number(pt.key.slice(8, 10))) }))
-    );
+  if (mode === 'week') {
+    const { from, to } = calendarWeekBounds(now);
+    const prevAnchor = new Date(from);
+    prevAnchor.setDate(prevAnchor.getDate() - 1);
+    const prev = calendarWeekBounds(prevAnchor);
+    return loadRangeDashboard(businessId, from, to, 'week', prev.from, prev.to, weekChartLabel);
   }
 
   if (mode === 'month') {
-    const { from, to } = yearBounds(year);
-    const prev = yearBounds(year - 1);
-    return loadRangeDashboard(businessId, from, to, 'year', prev.from, prev.to, (pts) => pts);
+    const y = now.getFullYear();
+    const m = now.getMonth();
+    const { from, to } = monthBounds(y, m);
+    const prev = m === 0 ? monthBounds(y - 1, 11) : monthBounds(y, m - 1);
+    return loadRangeDashboard(businessId, from, to, 'month', prev.from, prev.to, monthDayChartLabel);
   }
 
-  const productCats = await loadProductCategories(businessId);
-  const spanStart = year - 4;
-  const timeline: TimelinePoint[] = [];
-  const { from: curFrom, to: curTo } = yearBounds(year);
-  const { from: prevFrom, to: prevTo } = yearBounds(year - 1);
-
-  const [currentYear, previousYear] = await Promise.all([
-    fetchRange(businessId, curFrom, curTo),
-    fetchRange(businessId, prevFrom, prevTo),
-  ]);
-  const current = aggregate(currentYear.orders, currentYear.pos, productCats, 'year', curFrom, curTo);
-
-  for (let y = spanStart; y <= year; y++) {
-    const { from, to } = yearBounds(y);
-    const { orders, pos } = await fetchRange(businessId, from, to);
-    const slice = aggregate(orders, pos, productCats, 'year', from, to);
-    timeline.push({
-      key: String(y),
-      label: String(y),
-      online: slice.onlineSales,
-      walkIn: slice.walkInSales,
-      total: slice.totalSales,
-    });
-  }
-
-  const prevAgg = aggregate(previousYear.orders, previousYear.pos, productCats, 'year', prevFrom, prevTo);
-  current.timeline = timeline;
-  current.prevTotalSales = prevAgg.totalSales;
-  current.prevTotalOrders = prevAgg.totalOrderCount;
-  return current;
+  const y = now.getFullYear();
+  const { from, to } = yearBounds(y);
+  const prev = yearBounds(y - 1);
+  return loadRangeDashboard(businessId, from, to, 'year', prev.from, prev.to, (pts) => pts);
 }
 
 /** Daily sales timeline for one calendar month (x-axis: day 1 … last day). */
@@ -498,7 +494,9 @@ export async function loadSalesOverviewMonth(
   year: number,
   monthIndex: number
 ): Promise<SalesOverviewMonth> {
-  const data = await loadSalesAnalyticsView(businessId, 'day', year, monthIndex);
+  const { from, to } = monthBounds(year, monthIndex);
+  const prev = monthIndex === 0 ? monthBounds(year - 1, 11) : monthBounds(year, monthIndex - 1);
+  const data = await loadRangeDashboard(businessId, from, to, 'month', prev.from, prev.to, monthDayChartLabel);
   return {
     timeline: data.timeline,
     onlineSales: data.onlineSales,
@@ -523,37 +521,77 @@ export async function loadSalesDashboard(
   return data;
 }
 
+export type ExportLine = {
+  product: string;
+  quantity: number;
+  unitPrice: number;
+};
+
 export type ExportTransaction = {
   at: Date;
   type: 'Online' | 'Walk-in';
   status: 'Paid' | 'Unpaid';
+  payment: string;
+  customer: string;
+  itemCount: number;
   amount: number;
   products: string;
+  items: ExportLine[];
 };
+
+function describeItems(items: { product_name: string; unit_price: number; quantity: number }[]): {
+  products: string;
+  itemCount: number;
+  lines: ExportLine[];
+} {
+  const lines = items.map((item) => ({
+    product: item.product_name,
+    quantity: Number(item.quantity),
+    unitPrice: Number(item.unit_price),
+  }));
+  const itemCount = lines.reduce((sum, line) => sum + line.quantity, 0);
+  const products =
+    lines.length === 0
+      ? '—'
+      : lines.map((line) => `${line.quantity} × ${line.product} @ ₱${line.unitPrice.toFixed(2)}`).join('; ');
+  return { products, itemCount, lines };
+}
 
 function buildTransactions(orders: OrderRow[], pos: PosRow[]): ExportTransaction[] {
   const rows: ExportTransaction[] = [
-    ...orders.flatMap((o) => {
-      const amt = lineTotal(o.order_items ?? []);
-      const paid = orderCountsTowardOnlineSales(o);
-      if (o.status === 'cancelled') return [];
+    ...orders.flatMap((order) => {
+      if (order.status === 'cancelled') return [];
+      const described = describeItems(order.order_items ?? []);
+      const paid = orderCountsTowardOnlineSales(order);
       return [
         {
-          at: new Date(o.created_at),
+          at: new Date(order.created_at),
           type: 'Online' as const,
           status: paid ? ('Paid' as const) : ('Unpaid' as const),
-          amount: amt,
-          products: (o.order_items ?? []).map((i) => i.product_name).join('; '),
+          payment: formatSalePaymentMethod('online', order.payment_method),
+          customer: order.customer_name?.trim() || 'Customer',
+          itemCount: described.itemCount,
+          amount: lineTotal(order.order_items ?? []),
+          products: described.products,
+          items: described.lines,
         },
       ];
     }),
-    ...pos.map((s) => ({
-      at: new Date(s.created_at),
-      type: 'Walk-in' as const,
-      status: 'Paid' as const,
-      amount: lineTotal(s.pos_sale_items ?? []),
-      products: (s.pos_sale_items ?? []).map((i) => i.product_name).join('; '),
-    })),
+    ...pos.map((sale) => {
+      const described = describeItems(sale.pos_sale_items ?? []);
+      const paid = posCountsTowardWalkInSales(sale);
+      return {
+        at: new Date(sale.created_at),
+        type: 'Walk-in' as const,
+        status: paid ? ('Paid' as const) : ('Unpaid' as const),
+        payment: formatSalePaymentMethod('walk-in', sale.payment_method),
+        customer: sale.customer_name?.trim() || 'Walk-in customer',
+        itemCount: described.itemCount,
+        amount: lineTotal(sale.pos_sale_items ?? []),
+        products: described.products,
+        items: described.lines,
+      };
+    }),
   ];
   rows.sort((a, b) => b.at.getTime() - a.at.getTime());
   return rows;
@@ -584,6 +622,34 @@ export async function fetchDayExportPayload(
   });
   return {
     dayLabel,
+    generatedAt: new Date(),
+    data,
+    transactions: buildTransactions(orders, pos),
+  };
+}
+
+export type RangeExportPayload = {
+  reportTitle: string;
+  periodLabel: string;
+  generatedAt: Date;
+  data: SalesDashboardData;
+  transactions: ExportTransaction[];
+};
+
+export async function fetchRangeExportPayload(
+  businessId: string,
+  from: Date,
+  to: Date,
+  timelinePeriod: DashboardPeriod,
+  reportTitle: string,
+  periodLabel: string
+): Promise<RangeExportPayload> {
+  const productCats = await loadProductCategories(businessId);
+  const { orders, pos } = await fetchRange(businessId, from, to);
+  const data = aggregate(orders, pos, productCats, timelinePeriod, from, to);
+  return {
+    reportTitle,
+    periodLabel,
     generatedAt: new Date(),
     data,
     transactions: buildTransactions(orders, pos),
@@ -637,6 +703,7 @@ export type YearExportPayload = {
   };
   categoryTotals: Record<SalesCategoryKey, number>;
   topProducts: { name: string; units: number; revenue: number }[];
+  transactions: ExportTransaction[];
 };
 
 export async function fetchYearExportPayload(businessId: string, year: number): Promise<YearExportPayload> {
@@ -682,6 +749,7 @@ export async function fetchYearExportPayload(businessId: string, year: number): 
     },
     categoryTotals: yearData.categoryTotals,
     topProducts: yearData.topProducts,
+    transactions: buildTransactions(orders, pos),
   };
 }
 

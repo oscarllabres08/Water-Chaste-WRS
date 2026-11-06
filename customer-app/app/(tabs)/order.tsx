@@ -3,7 +3,6 @@ import {
   ActivityIndicator,
   Image,
   Modal,
-  Platform,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -11,7 +10,6 @@ import {
   useWindowDimensions,
   View,
 } from 'react-native';
-import * as Location from 'expo-location';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
@@ -20,7 +18,7 @@ import { useRouter } from 'expo-router';
 import { useAuth } from '../../providers/AuthProvider';
 import { useNotifications } from '../../providers/NotificationsProvider';
 import { supabase } from '../../lib/supabase';
-import { prepareImageForUpload } from '../../lib/prepareImageForUpload';
+import { imageUploadPresets, prepareImageForUpload } from '../../lib/prepareImageForUpload';
 import { readPreparedImageBytes } from '../../lib/readPreparedImageBytes';
 import { Screen } from '../../ui/components/Screen';
 import { Card } from '../../ui/components/Card';
@@ -30,6 +28,7 @@ import { GradientPressable, PrimaryGradient } from '../../ui/components/PrimaryG
 import { TextField } from '../../ui/components/TextField';
 import { Skeleton } from '../../ui/components/Skeleton';
 import { NotificationsMenu } from '../../ui/components/NotificationsMenu';
+import { readCurrentAddress } from '../../lib/currentAddress';
 import { computeDeliveryFee, countDeliveryContainers } from '../../lib/deliveryFee';
 import { downloadRemoteImage } from '../../lib/downloadRemoteImage';
 import { theme } from '../../ui/theme';
@@ -63,7 +62,7 @@ type PaymentMethod = 'cod' | 'gcash' | 'maya';
 
 function checkoutLocationHintColor(message: string) {
   const m = message.toLowerCase();
-  if (message.includes('Location added') || m.includes('successfully')) return theme.colors.success;
+  if (message.includes('Location added') || m.includes('saved') || m.includes('successfully')) return theme.colors.success;
   if (
     m.includes('you can still') ||
     m.includes('continue with your address') ||
@@ -165,7 +164,7 @@ export default function OrderScreen() {
             .select('user_id')
             .eq('role', 'seller')
             .eq('seller_team_role', 'owner')
-            .order('created_at', { ascending: false })
+            .order('created_at', { ascending: true })
             .limit(1)
             .maybeSingle();
           if (ownerErr) throw ownerErr;
@@ -175,7 +174,7 @@ export default function OrderScreen() {
               .from('profiles')
               .select('user_id')
               .eq('role', 'seller')
-              .order('created_at', { ascending: false })
+              .order('created_at', { ascending: true })
               .limit(1)
               .maybeSingle();
             if (fallbackErr) throw fallbackErr;
@@ -364,7 +363,7 @@ export default function OrderScreen() {
   }
 
   async function uploadPaymentProofOrThrow(userId: string, localUri: string) {
-    const prepared = await prepareImageForUpload(localUri);
+    const prepared = await prepareImageForUpload(localUri, imageUploadPresets.proof);
     const objectPath = `payment-proofs/${userId}/${Date.now()}-${Math.random().toString(16).slice(2)}.jpg`;
     const bytes = await readPreparedImageBytes(prepared);
     const { error: upErr } = await supabase.storage.from('wrs-assets').upload(objectPath, bytes, {
@@ -479,8 +478,12 @@ export default function OrderScreen() {
       setErr('Please add at least 1 product.');
       return;
     }
-    if (!customerName.trim() || !deliveryAddress.trim() || !contactNumber.trim()) {
-      setErr('Please fill Name, Address, and Contact number.');
+    if (!customerName.trim() || !contactNumber.trim()) {
+      setErr('Please fill Name and Contact number.');
+      return;
+    }
+    if (!deliveryAddress.trim()) {
+      setErr('Enter your address, or tap Use Current Location, before placing the order.');
       return;
     }
 
@@ -519,6 +522,16 @@ export default function OrderScreen() {
 
     setPlacing(true);
     try {
+      const { error: profileErr } = await supabase
+        .from('profiles')
+        .update({
+          address: deliveryAddress.trim(),
+          latitude: coords?.latitude ?? profileDefaults?.latitude ?? null,
+          longitude: coords?.longitude ?? profileDefaults?.longitude ?? null,
+        })
+        .eq('user_id', user.id);
+      if (profileErr) throw profileErr;
+
       const proofPath =
         paymentMethod === 'gcash' || paymentMethod === 'maya'
           ? await uploadPaymentProofOrThrow(user.id, paymentProofUri!)
@@ -595,25 +608,38 @@ export default function OrderScreen() {
   }
 
   async function useCurrentLocation() {
-    if (Platform.OS === 'web') {
-      return;
-    }
     if (locating) return;
     setLocationMessage(null);
     setLocating(true);
     try {
-      const { status } = await Location.requestForegroundPermissionsAsync();
-      if (status !== 'granted') {
-        setCoords(null);
-        setLocationMessage('Location off — you can still place your order. The seller will use your delivery address in Maps.');
+      const result = await readCurrentAddress();
+      if (!result.ok) {
+        setLocationMessage(result.error);
         return;
       }
-      const pos = await Location.getCurrentPositionAsync({ accuracy: Location.Accuracy.Balanced });
-      setCoords({ latitude: pos.coords.latitude, longitude: pos.coords.longitude });
-      setLocationMessage('Location added to your order.');
-    } catch {
-      setCoords(null);
-      setLocationMessage('Could not get GPS. Check signal and try again, or continue with your address only.');
+      setCoords({ latitude: result.latitude, longitude: result.longitude });
+      setDeliveryAddress(result.address);
+      if (user) {
+        const { error } = await supabase
+          .from('profiles')
+          .update({
+            address: result.address,
+            latitude: result.latitude,
+            longitude: result.longitude,
+          })
+          .eq('user_id', user.id);
+        if (error) {
+          setLocationMessage(error.message);
+          return;
+        }
+        setProfileDefaults((prev) => ({
+          ...(prev ?? {}),
+          address: result.address,
+          latitude: result.latitude,
+          longitude: result.longitude,
+        }));
+      }
+      setLocationMessage('Address saved to your profile.');
     } finally {
       setLocating(false);
     }
@@ -632,7 +658,7 @@ export default function OrderScreen() {
     step === 'menu' && cart.length > 0 ? 120 : step === 'checkout' ? 80 : theme.spacing.xl;
 
   return (
-    <Screen style={{ padding: 0 }}>
+    <Screen style={{ padding: 0 }} enter>
       <NotificationsMenu visible={notifOpen} onClose={() => setNotifOpen(false)} />
 
       <Modal visible={proofModalOpen} transparent animationType="fade" onRequestClose={() => setProofModalOpen(false)}>
@@ -1297,7 +1323,7 @@ export default function OrderScreen() {
                         </Text>
                       ) : (
                         <Text variant="muted" style={{ fontSize: 13, lineHeight: 18 }}>
-                          Optional GPS pin — your address above is enough for delivery.
+                          Address is required. Type it, or tap Use Current Location to save it on your profile.
                         </Text>
                       )}
                     </View>

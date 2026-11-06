@@ -41,6 +41,46 @@ const POS_CATEGORIES: { id: PosCategory; label: string }[] = [
   { id: 'others', label: 'Others' },
 ];
 
+type PosDraft = {
+  cart: CartLine[];
+  customerName: string;
+  paymentMethod: PosPaymentMethod;
+  cashReceived: string;
+  borrowContainers: boolean;
+  borrowQty: string;
+  borrowCodes: string;
+};
+
+function posDraftKey(businessId: string) {
+  return `water-chaste-pos-draft:${businessId}`;
+}
+
+function readPosDraft(businessId: string): PosDraft | null {
+  try {
+    const raw = sessionStorage.getItem(posDraftKey(businessId));
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as PosDraft;
+    if (!parsed || !Array.isArray(parsed.cart)) return null;
+    return parsed;
+  } catch {
+    return null;
+  }
+}
+
+function writePosDraft(businessId: string, draft: PosDraft) {
+  const empty =
+    draft.cart.length === 0 &&
+    !draft.customerName.trim() &&
+    !draft.cashReceived.trim() &&
+    !draft.borrowContainers &&
+    !draft.borrowCodes.trim();
+  if (empty) {
+    sessionStorage.removeItem(posDraftKey(businessId));
+    return;
+  }
+  sessionStorage.setItem(posDraftKey(businessId), JSON.stringify(draft));
+}
+
 const POS_PAYMENT_METHODS: { id: PosPaymentMethod; label: string; icon: 'cash' | 'gcash' }[] = [
   { id: 'cash', label: 'Cash', icon: 'cash' },
   { id: 'gcash', label: 'GCash', icon: 'gcash' },
@@ -52,6 +92,7 @@ export function PosPage() {
   const [loading, setLoading] = useState(true);
   const [cart, setCart] = useState<CartLine[]>([]);
   const [submitting, setSubmitting] = useState(false);
+  const [submitKind, setSubmitKind] = useState<'paid' | 'unpaid' | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [search, setSearch] = useState('');
@@ -63,7 +104,12 @@ export function PosPage() {
   const [borrowContainers, setBorrowContainers] = useState(false);
   const [borrowQty, setBorrowQty] = useState('1');
   const [borrowCodes, setBorrowCodes] = useState('');
+  const [addedNote, setAddedNote] = useState<string | null>(null);
+  const [addedFlashId, setAddedFlashId] = useState<string | null>(null);
   const lastSavedCustomerKey = useRef('');
+  const addedNoteTimer = useRef<number | null>(null);
+  const skipDraftSave = useRef(true);
+  const cartRef = useRef<HTMLElement | null>(null);
 
   const loadProducts = useCallback(async () => {
     if (!businessId) return;
@@ -84,6 +130,38 @@ export function PosPage() {
     const names = await loadPosCustomerNames(businessId);
     setCustomerNameOptions(names);
   }, [businessId]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    const draft = readPosDraft(businessId);
+    if (draft) {
+      setCart(draft.cart);
+      setCustomerName(draft.customerName ?? '');
+      setPaymentMethod(draft.paymentMethod === 'gcash' ? 'gcash' : 'cash');
+      setCashReceived(draft.cashReceived ?? '');
+      setBorrowContainers(Boolean(draft.borrowContainers));
+      setBorrowQty(draft.borrowQty || '1');
+      setBorrowCodes(draft.borrowCodes ?? '');
+    }
+    skipDraftSave.current = true;
+  }, [businessId]);
+
+  useEffect(() => {
+    if (!businessId) return;
+    if (skipDraftSave.current) {
+      skipDraftSave.current = false;
+      return;
+    }
+    writePosDraft(businessId, {
+      cart,
+      customerName,
+      paymentMethod,
+      cashReceived,
+      borrowContainers,
+      borrowQty,
+      borrowCodes,
+    });
+  }, [businessId, cart, customerName, paymentMethod, cashReceived, borrowContainers, borrowQty, borrowCodes]);
 
   useEffect(() => {
     void loadProducts();
@@ -122,8 +200,13 @@ export function PosPage() {
   const cartCount = useMemo(() => cart.reduce((s, l) => s + l.quantity, 0), [cart]);
   const cartTotal = useMemo(() => cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0), [cart]);
   const cashNum = Number(cashReceived);
-  const change =
-    paymentMethod === 'cash' && Number.isFinite(cashNum) && cashNum >= cartTotal ? cashNum - cartTotal : 0;
+  const change = Number.isFinite(cashNum) && cashNum >= cartTotal ? cashNum - cartTotal : 0;
+
+  useEffect(() => {
+    return () => {
+      if (addedNoteTimer.current != null) window.clearTimeout(addedNoteTimer.current);
+    };
+  }, []);
 
   function addProduct(p: ProductRow) {
     const left = remainingStock(p.id);
@@ -132,6 +215,13 @@ export function PosPage() {
       return;
     }
     setError(null);
+    setAddedNote(`${p.name} added to the order.`);
+    setAddedFlashId(p.id);
+    if (addedNoteTimer.current != null) window.clearTimeout(addedNoteTimer.current);
+    addedNoteTimer.current = window.setTimeout(() => {
+      setAddedNote(null);
+      setAddedFlashId(null);
+    }, 2200);
     setCart((prev) => {
       const idx = prev.findIndex((c) => c.productId === p.id);
       if (idx === -1) {
@@ -229,13 +319,14 @@ export function PosPage() {
       borrowPlan = { quantity: qty, containerNumbers: validated.containerNumbers };
     }
 
-    if (paymentSettled && paymentMethod === 'cash') {
+    if (paymentSettled) {
       if (!Number.isFinite(cashNum) || cashNum < cartTotal) {
-        setError('Enter cash received (at least the order total) for a paid cash sale.');
+        setError('Enter cash received (at least the order total) for a paid sale.');
         return;
       }
     }
 
+    setSubmitKind(paymentSettled ? 'paid' : 'unpaid');
     setSubmitting(true);
     setError(null);
     setSuccess(null);
@@ -245,12 +336,9 @@ export function PosPage() {
         const saved = await savePosWalkInCustomer(businessId, trimmedName);
         if (saved.ok) lastSavedCustomerKey.current = customerNameKey(trimmedName);
       }
-      const cashValue =
-        paymentMethod === 'cash' && Number.isFinite(cashNum) ? cashNum : paymentSettled ? cartTotal : null;
+      const cashValue = Number.isFinite(cashNum) ? cashNum : null;
       const changeDue =
-        paymentMethod === 'cash' && paymentSettled && cashValue != null
-          ? Math.max(0, cashValue - cartTotal)
-          : null;
+        paymentSettled && cashValue != null ? Math.max(0, cashValue - cartTotal) : null;
 
       const settledAt = paymentSettled ? new Date().toISOString() : null;
       const { data: saleRow, error: saleErr } = await supabase
@@ -321,14 +409,12 @@ export function PosPage() {
       setError(e instanceof Error ? e.message : 'Failed to save sale');
     } finally {
       setSubmitting(false);
+      setSubmitKind(null);
     }
   }
 
   return (
     <div className="pos-layout">
-      {error ? <p className="error-text module-alert">{error}</p> : null}
-      {success ? <p className="success-text module-alert">{success}</p> : null}
-
       <div className="pos-grid">
         <section className="pos-main card card-flat">
           <div className="pos-toolbar">
@@ -369,29 +455,63 @@ export function PosPage() {
           <div className="pos-product-grid">
             {filteredProducts.map((p) => {
               const img = publicWrsAssetUrl(supabase, p.image_url);
+              const inOrder = cart.find((line) => line.productId === p.id)?.quantity ?? 0;
+              const justAdded = addedFlashId === p.id;
               return (
-                <article key={p.id} className="pos-product-card">
+                <article
+                  key={p.id}
+                  className={`pos-product-card${justAdded ? ' pos-product-card--added' : ''}`}
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Add ${p.name} to order`}
+                  onClick={() => addProduct(p)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' || e.key === ' ') {
+                      e.preventDefault();
+                      addProduct(p);
+                    }
+                  }}
+                >
                   <div className="pos-product-media">
                     {img ? <img src={img} alt="" /> : <div className="pos-product-placeholder" />}
                   </div>
                   <h3>{p.name}</h3>
-                  <p className="pos-product-price">{money(Number(p.price))}</p>
-                  <p className={`pos-stock${isLowStock(p.stock_quantity) ? ' pos-stock--low' : ''}`}>
-                    <CheckIcon />{' '}
-                    {tracksStock(p.category) && p.stock_quantity != null
-                      ? stockLabel(p.stock_quantity)
-                      : 'In Stock'}
-                  </p>
-                  <button type="button" className="pos-add-btn" aria-label={`Add ${p.name}`} onClick={() => addProduct(p)}>
-                    +
-                  </button>
+                  <div className="pos-product-foot">
+                    <div className="pos-product-meta">
+                      <p className="pos-product-price">{money(Number(p.price))}</p>
+                      <p className={`pos-stock${isLowStock(p.stock_quantity) ? ' pos-stock--low' : ''}`}>
+                        <CheckIcon />{' '}
+                        {tracksStock(p.category) && p.stock_quantity != null
+                          ? stockLabel(p.stock_quantity)
+                          : 'In Stock'}
+                      </p>
+                    </div>
+                    <span className="pos-add-btn" aria-hidden>
+                      <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                        <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                      </svg>
+                    </span>
+                  </div>
+                  {inOrder > 0 ? (
+                    <p className="pos-added-chip">{justAdded ? 'Added' : `Added · ${inOrder}`}</p>
+                  ) : null}
                 </article>
               );
             })}
           </div>
+          <button
+            type="button"
+            className="pos-view-order"
+            onClick={() => cartRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' })}
+          >
+            View order
+            <span>
+              {cartCount} {cartCount === 1 ? 'item' : 'items'} · {money(cartTotal)}
+            </span>
+          </button>
         </section>
 
-        <aside className="pos-cart card card-flat">
+        <aside id="pos-cart" ref={cartRef} className="pos-cart card card-flat">
           <div className="pos-cart-head">
             <h2>
               <CartIcon /> Cart ({cartCount} {cartCount === 1 ? 'item' : 'items'})
@@ -413,7 +533,7 @@ export function PosPage() {
           >
             <div className="pos-cart-lines">
               {cart.length === 0 ? (
-                <p className="muted-block">Tap + on a product to add it here.</p>
+                <p className="muted-block">Tap a product card to add it here.</p>
               ) : (
                 cart.map((l) => {
                   const img = publicWrsAssetUrl(supabase, l.image_url);
@@ -535,10 +655,7 @@ export function PosPage() {
                     role="tab"
                     aria-selected={paymentMethod === m.id}
                     className={`pos-category-tab${paymentMethod === m.id ? ' active' : ''}`}
-                    onClick={() => {
-                      setPaymentMethod(m.id);
-                      if (m.id === 'gcash') setCashReceived('');
-                    }}
+                    onClick={() => setPaymentMethod(m.id)}
                   >
                     {m.icon === 'cash' ? <CashIcon /> : <GcashIcon />}
                     {m.label}
@@ -547,48 +664,60 @@ export function PosPage() {
               </div>
             </div>
 
-            {paymentMethod === 'cash' ? (
-              <>
-                <label className="field pos-cash-field">
-                  <span className="pos-cash-label">
-                    <CashIcon /> Cash received
-                  </span>
-                  <input
-                    type="number"
-                    min={0}
-                    step="0.01"
-                    placeholder="0.00"
-                    value={cashReceived}
-                    onChange={(e) => setCashReceived(e.target.value)}
-                  />
-                </label>
-                <div className="pos-change-box">
-                  <span>Change</span>
-                  <strong>{money(change)}</strong>
-                </div>
-              </>
-            ) : (
-              <p className="muted-block pos-gcash-hint">GCash payment — mark paid when reference is confirmed.</p>
-            )}
+            <label className="field pos-cash-field">
+              <span className="pos-cash-label">
+                <CashIcon /> Cash received
+              </span>
+              <input
+                type="number"
+                min={0}
+                step="0.01"
+                placeholder="0.00"
+                value={cashReceived}
+                onChange={(e) => setCashReceived(e.target.value)}
+              />
+            </label>
+            <div className="pos-change-box">
+              <span>Change</span>
+              <strong>{money(change)}</strong>
+            </div>
+            {paymentMethod === 'gcash' ? (
+              <p className="muted-block pos-gcash-hint">GCash payment — enter the cash received, then mark paid when the reference is confirmed.</p>
+            ) : null}
           </div>
           </div>
 
           <div className="pos-cart-actions">
+            {error || success || addedNote || submitting ? (
+              <p
+                className={`pos-sale-note${error ? ' pos-sale-note--error' : ''}${submitting ? ' pos-sale-note--loading' : ''}`}
+                role="status"
+              >
+                {submitting ? <span className="pos-btn-spinner" aria-hidden /> : null}
+                {submitting
+                  ? 'Completing sale…'
+                  : error ?? success ?? addedNote}
+              </p>
+            ) : null}
             <button
               type="button"
-              className="btn btn-primary btn-block pos-complete-btn"
+              className={`btn btn-primary btn-block pos-complete-btn${submitting && submitKind === 'paid' ? ' is-loading' : ''}`}
               disabled={cart.length === 0 || submitting}
+              aria-busy={submitting && submitKind === 'paid'}
               onClick={() => void submitSale(true)}
             >
-              <CheckIcon /> {submitting ? 'Saving…' : 'Complete paid order'}
+              {submitting && submitKind === 'paid' ? <span className="pos-btn-spinner" aria-hidden /> : <CheckIcon />}
+              {submitting && submitKind === 'paid' ? 'Completing sale…' : 'Complete paid order'}
             </button>
             <button
               type="button"
-              className="btn btn-block pos-unpaid-btn"
+              className={`btn btn-block pos-unpaid-btn${submitting && submitKind === 'unpaid' ? ' is-loading' : ''}`}
               disabled={cart.length === 0 || submitting}
+              aria-busy={submitting && submitKind === 'unpaid'}
               onClick={() => void submitSale(false)}
             >
-              Complete as unpaid order
+              {submitting && submitKind === 'unpaid' ? <span className="pos-btn-spinner" aria-hidden /> : null}
+              {submitting && submitKind === 'unpaid' ? 'Completing sale…' : 'Complete as unpaid order'}
             </button>
             <button type="button" className="btn btn-ghost btn-block" disabled={cart.length === 0} onClick={clearCart}>
               <TrashIcon /> Clear Cart

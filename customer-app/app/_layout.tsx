@@ -4,7 +4,7 @@ import { Stack, useRouter, useSegments, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useCallback, useEffect } from 'react';
 import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
-import { Platform, Pressable } from 'react-native';
+import { Pressable } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
@@ -15,6 +15,8 @@ import {
   Nunito_800ExtraBold,
 } from '@expo-google-fonts/nunito';
 
+import { ensureAndroidNotificationChannels } from '../lib/notificationChannels';
+import { getNotificationRuntimePrefs } from '../lib/notificationRuntime';
 import { AuthProvider, useAuth } from '../providers/AuthProvider';
 import { NotificationsProvider, useNotifications } from '../providers/NotificationsProvider';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,13 +30,30 @@ export const unstable_settings = { initialRouteName: '(tabs)' };
 SplashScreen.preventAutoHideAsync();
 
 Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldShowBanner: true,
-    shouldShowList: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-  }),
+  handleNotification: async (notification) => {
+    const data = notification?.request?.content?.data as Record<string, unknown> | undefined;
+    const soundOnly = data?.soundOnly === '1';
+    if (soundOnly) {
+      return {
+        shouldShowAlert: false,
+        shouldShowBanner: false,
+        shouldShowList: false,
+        shouldPlaySound: true,
+        shouldSetBadge: false,
+      };
+    }
+    const { notificationsEnabled } = getNotificationRuntimePrefs();
+    const show = notificationsEnabled;
+    return {
+      shouldShowAlert: show,
+      shouldShowBanner: show,
+      shouldShowList: show,
+      // Foreground sound is notification.wav from playNotificationSound.
+      // Background alerts use the Android channel sound (same file).
+      shouldPlaySound: false,
+      shouldSetBadge: false,
+    };
+  },
 });
 
 export default function RootLayout() {
@@ -55,22 +74,8 @@ export default function RootLayout() {
   }, [loaded]);
 
   useEffect(() => {
-    if (Platform.OS !== 'android') return;
-    Notifications.setNotificationChannelAsync('default', {
-      name: 'default',
-      importance: Notifications.AndroidImportance.MAX,
-      // Android channel sounds use the raw resource name (no extension).
-      // `../notification.wav` is bundled via the expo-notifications config plugin.
-      sound: 'notification',
-      vibrationPattern: [0, 250, 250, 250],
-      lightColor: theme.colors.primaryDark,
-    });
-    Notifications.setNotificationChannelAsync('silent', {
-      name: 'silent',
-      importance: Notifications.AndroidImportance.MAX,
-      sound: null,
-      vibrationPattern: [0],
-      lightColor: theme.colors.primaryDark,
+    void ensureAndroidNotificationChannels().catch((e) => {
+      if (__DEV__) console.warn('[notifications] channel setup:', e);
     });
   }, []);
 

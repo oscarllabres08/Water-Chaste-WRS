@@ -5,7 +5,7 @@ import { SalesBarChart } from '../components/SalesCharts';
 import { AlertIcon, BoxIcon, DropIcon, PeopleIcon, PesoIcon, ReceiptIcon, StarIcon, TrendIcon } from '../components/UiIcons';
 import { useAuth } from '../auth/AuthProvider';
 import { todayDateInputValue } from '../lib/expenseTypes';
-import { money } from '../lib/format';
+import { money, publicWrsAssetUrl } from '../lib/format';
 import { LOW_STOCK_THRESHOLD } from '../lib/inventoryStock';
 import { orderCountsTowardOnlineSales, posCountsTowardWalkInSales, saleRecordedAt } from '../lib/orderSalesEligible';
 import { loadSalesDashboard, type TimelinePoint } from '../lib/salesReportData';
@@ -19,6 +19,7 @@ type RecentOrderRow = {
   created_at: string;
   payment_settled: boolean;
   amount: number;
+  avatarUrl: string | null;
 };
 
 type SnapshotProduct = {
@@ -46,14 +47,19 @@ function pctChange(current: number, previous: number) {
 
 const RECENT_ORDERS_PAGE = 10;
 
-function mapOnlineRecent(o: {
-  id: string;
-  status: string;
-  customer_name: string;
-  created_at: string;
-  payment_settled: boolean | null;
-  order_items?: { unit_price: number; quantity: number }[] | null;
-}): RecentOrderRow {
+function mapOnlineRecent(
+  o: {
+    id: string;
+    customer_id: string | null;
+    status: string;
+    customer_name: string;
+    created_at: string;
+    payment_settled: boolean | null;
+    order_items?: { unit_price: number; quantity: number }[] | null;
+  },
+  avatarByCustomer: Map<string, string | null>
+): RecentOrderRow {
+  const path = o.customer_id ? avatarByCustomer.get(o.customer_id) ?? null : null;
   return {
     id: o.id,
     source: 'online',
@@ -62,6 +68,7 @@ function mapOnlineRecent(o: {
     created_at: o.created_at,
     payment_settled: o.payment_settled === true,
     amount: lineAmount(o.order_items),
+    avatarUrl: publicWrsAssetUrl(supabase, path),
   };
 }
 
@@ -80,6 +87,7 @@ function mapWalkInRecent(s: {
     created_at: s.created_at,
     payment_settled: s.payment_settled === true,
     amount: lineAmount(s.pos_sale_items),
+    avatarUrl: null,
   };
 }
 
@@ -115,7 +123,7 @@ export function DashboardPage() {
       const [ordersRes, posRes] = await Promise.all([
         supabase
           .from('orders')
-          .select('id,status,customer_name,created_at,payment_settled,order_items(unit_price,quantity)')
+          .select('id,customer_id,status,customer_name,created_at,payment_settled,order_items(unit_price,quantity)')
           .eq('seller_id', businessId)
           .order('created_at', { ascending: false })
           .limit(fetchLimit),
@@ -129,8 +137,21 @@ export function DashboardPage() {
       if (ordersRes.error) throw ordersRes.error;
       if (posRes.error) throw posRes.error;
 
+      const onlineRows = (ordersRes.data ?? []) as Parameters<typeof mapOnlineRecent>[0][];
+      const customerIds = [...new Set(onlineRows.map((row) => row.customer_id).filter((id): id is string => Boolean(id)))];
+      const avatarByCustomer = new Map<string, string | null>();
+      if (customerIds.length > 0) {
+        const { data: profiles } = await supabase
+          .from('profiles')
+          .select('user_id,avatar_path')
+          .in('user_id', customerIds);
+        for (const profile of (profiles ?? []) as { user_id: string; avatar_path: string | null }[]) {
+          avatarByCustomer.set(profile.user_id, profile.avatar_path);
+        }
+      }
+
       const merged = [
-        ...(ordersRes.data ?? []).map((o) => mapOnlineRecent(o as Parameters<typeof mapOnlineRecent>[0])),
+        ...onlineRows.map((o) => mapOnlineRecent(o, avatarByCustomer)),
         ...(posRes.data ?? []).map((s) => mapWalkInRecent(s as Parameters<typeof mapWalkInRecent>[0])),
       ].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
@@ -425,11 +446,22 @@ export function DashboardPage() {
             <ul className="station-tx-list">
               {recent.slice(0, 5).map((row) => (
                 <li key={`${row.source}-${row.id}`}>
-                  <div>
-                    <strong>{row.customer_name}</strong>
-                    <small>
-                      {row.payment_settled ? 'Paid' : 'Unpaid'} · {new Date(row.created_at).toLocaleDateString()}
-                    </small>
+                  <div className="station-tx-person">
+                    <span className="customer-list-avatar" aria-hidden>
+                      {row.avatarUrl ? (
+                        <img src={row.avatarUrl} alt="" />
+                      ) : (
+                        <span className="customer-list-avatar-fallback">
+                          {(row.customer_name.trim()[0] ?? 'C').toUpperCase()}
+                        </span>
+                      )}
+                    </span>
+                    <div>
+                      <strong>{row.customer_name}</strong>
+                      <small>
+                        {row.payment_settled ? 'Paid' : 'Unpaid'} · {new Date(row.created_at).toLocaleDateString()}
+                      </small>
+                    </div>
                   </div>
                   <div className="station-tx-end">
                     <b>{money(row.amount)}</b>

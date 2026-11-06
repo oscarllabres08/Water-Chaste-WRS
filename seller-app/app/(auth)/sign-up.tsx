@@ -110,18 +110,27 @@ export default function SignUpScreen() {
       });
 
       if (regErr) {
+        const { data: stillIn } = await supabase.auth.getSession();
+        if (!stillIn.session) {
+          router.replace({
+            pathname: '/(auth)/sign-in',
+            params: {
+              notice: 'Registration submitted. You can sign in only after the store administrator approves your account.',
+            },
+          });
+          return;
+        }
         await supabase.auth.signOut();
         setError(regErr);
         return;
       }
 
-      // First ever registrant becomes the owner and can proceed immediately.
+      // The store owner is the only account that may continue. Everyone else stays signed out
+      // until the master admin approves them — the app never opens Orders before that.
       if (regObj?.owner === true && regObj?.approved === true) {
-        router.replace('/(tabs)/orders');
         return;
       }
 
-      // All subsequent registrants are pending staff: must wait for owner approval.
       await supabase.auth.signOut();
       router.replace({
         pathname: '/(auth)/sign-in',

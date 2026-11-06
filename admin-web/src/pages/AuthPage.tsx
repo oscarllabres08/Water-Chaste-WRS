@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Navigate } from 'react-router-dom';
 
 import { useAuth } from '../auth/AuthProvider';
@@ -59,6 +59,21 @@ export function AuthPage() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+
+  useEffect(() => {
+    const root = document.documentElement;
+    const previous = root.getAttribute('data-theme');
+    root.removeAttribute('data-theme');
+    root.style.colorScheme = 'light';
+    return () => {
+      if (previous === 'dark') {
+        root.setAttribute('data-theme', 'dark');
+        root.style.colorScheme = 'dark';
+      } else {
+        root.style.colorScheme = 'light';
+      }
+    };
+  }, []);
 
   if (!loading && !profileLoading && user && (isStoreOwner || isApprovedStaff)) {
     return <Navigate to="/" replace />;

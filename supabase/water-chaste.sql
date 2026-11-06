@@ -30,6 +30,7 @@
     user_id uuid primary key references auth.users(id) on delete cascade,
     role public.user_role not null default 'customer',
     display_name text,
+    username text,
     phone text,
     address text,
     avatar_path text,
@@ -48,6 +49,7 @@
   );
 
   -- Backfill/upgrade safety: ensure columns exist on older DBs
+  alter table public.profiles add column if not exists username text;
   alter table public.profiles add column if not exists store_name text;
   alter table public.profiles add column if not exists store_code text;
   alter table public.profiles add column if not exists business_hours text;
@@ -84,6 +86,10 @@
     seller_workspace_owner_id = coalesce(p.seller_workspace_owner_id, p.user_id)
   where p.role = 'seller'
     and p.seller_team_role is null;
+
+  create unique index if not exists profiles_username_lower_uidx
+    on public.profiles (lower(username))
+    where coalesce(trim(username), '') <> '';
 
   create unique index if not exists profiles_owner_store_code_upper_uidx
     on public.profiles (upper(trim(store_code)))
@@ -299,9 +305,17 @@
   set search_path = public
   set row_security = off
   as $$
+  declare
+    v_username text;
   begin
-    insert into public.profiles(user_id, role, display_name)
-    values (new.id, 'customer', coalesce(new.raw_user_meta_data->>'display_name', new.email))
+    v_username := nullif(lower(trim(coalesce(new.raw_user_meta_data->>'username', ''))), '');
+    insert into public.profiles(user_id, role, display_name, username)
+    values (
+      new.id,
+      'customer',
+      coalesce(nullif(trim(new.raw_user_meta_data->>'display_name'), ''), new.email),
+      v_username
+    )
     on conflict (user_id) do nothing;
     return new;
   end;
@@ -311,6 +325,26 @@
   create trigger on_auth_user_created
   after insert on auth.users
   for each row execute procedure public.handle_new_user();
+
+  -- True when another customer already uses this username. Safe for the signup screen (no row data returned).
+  create or replace function public.customer_username_taken(p_username text)
+  returns boolean
+  language sql
+  stable
+  security definer
+  set search_path = public
+  set row_security = off
+  as $$
+    select exists (
+      select 1
+      from public.profiles
+      where lower(username) = lower(trim(coalesce(p_username, '')))
+        and coalesce(trim(username), '') <> ''
+    );
+  $$;
+
+  revoke all on function public.customer_username_taken(text) from public;
+  grant execute on function public.customer_username_taken(text) to anon, authenticated;
 
   -- RLS
   alter table public.profiles enable row level security;
@@ -642,9 +676,8 @@
           'qty', new.quantity
         )
       from public.profiles p
-      where p.seller_workspace_owner_id = v_order.seller_id
-        and p.seller_team_role = 'staff'
-        and p.seller_join_status = 'approved'
+      where p.user_id <> v_order.seller_id
+        and public.seller_business_id(p.user_id) = v_order.seller_id
       on conflict do nothing;
     exception
       when others then
@@ -839,30 +872,46 @@
   alter table public.ewallet_accounts enable row level security;
 
   -- Helpers
-  -- Business (store) owner user_id for data scoped by orders.seller_id / products.seller_id.
-  -- Staff (approved) → workspace owner; owner → self; legacy seller → self; pending/rejected → null.
+  -- One Water Chaste store. Every approved rider or admin account reads and writes
+  -- the same owner id, so online orders do not split across accounts.
+  -- Pending or rejected accounts get null.
   create or replace function public.seller_business_id(uid uuid)
   returns uuid
-  language sql
+  language plpgsql
   stable
   security definer
   set search_path = public
   set row_security = off
   as $$
-    select case
-      when p.role <> 'seller' then null::uuid
-      when p.seller_team_role = 'staff'
-        and p.seller_join_status = 'approved'
-        and p.seller_workspace_owner_id is not null
-        then p.seller_workspace_owner_id
-      when p.seller_team_role = 'owner'
-        then p.user_id
-      when p.seller_team_role is null
-        then p.user_id
-      else null::uuid
-    end
-    from public.profiles p
-    where p.user_id = uid;
+  declare
+    v_store uuid;
+  begin
+    if not exists (
+      select 1
+      from public.profiles p
+      where p.user_id = uid
+        and p.role = 'seller'
+        and coalesce(p.seller_join_status, 'approved') = 'approved'
+        and (
+          p.seller_team_role is null
+          or p.seller_team_role = 'owner'
+          or p.seller_team_role = 'staff'
+        )
+    ) then
+      return null;
+    end if;
+
+    select o.user_id
+    into v_store
+    from public.profiles o
+    where o.role = 'seller'
+      and o.seller_team_role = 'owner'
+      and coalesce(o.seller_join_status, 'approved') = 'approved'
+    order by o.created_at asc
+    limit 1;
+
+    return coalesce(v_store, uid);
+  end;
   $$;
 
   revoke all on function public.seller_business_id(uuid) from public;
@@ -1746,53 +1795,36 @@
   create policy "business_expenses owner read"
   on public.business_expenses for select
   using (
-    seller_id = auth.uid()
-    and exists (
-      select 1 from public.profiles p
-      where p.user_id = auth.uid()
-        and p.role = 'seller'
-        and coalesce(p.seller_team_role, 'owner') = 'owner'
-    )
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
   );
 
   drop policy if exists "business_expenses owner insert" on public.business_expenses;
   create policy "business_expenses owner insert"
   on public.business_expenses for insert
   with check (
-    seller_id = auth.uid()
-    and exists (
-      select 1 from public.profiles p
-      where p.user_id = auth.uid()
-        and p.role = 'seller'
-        and coalesce(p.seller_team_role, 'owner') = 'owner'
-    )
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
   );
 
   drop policy if exists "business_expenses owner update" on public.business_expenses;
   create policy "business_expenses owner update"
   on public.business_expenses for update
   using (
-    seller_id = auth.uid()
-    and exists (
-      select 1 from public.profiles p
-      where p.user_id = auth.uid()
-        and p.role = 'seller'
-        and coalesce(p.seller_team_role, 'owner') = 'owner'
-    )
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
   )
-  with check (seller_id = auth.uid());
+  with check (
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
+  );
 
   drop policy if exists "business_expenses owner delete" on public.business_expenses;
   create policy "business_expenses owner delete"
   on public.business_expenses for delete
   using (
-    seller_id = auth.uid()
-    and exists (
-      select 1 from public.profiles p
-      where p.user_id = auth.uid()
-        and p.role = 'seller'
-        and coalesce(p.seller_team_role, 'owner') = 'owner'
-    )
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
   );
 
   -- Notes:
@@ -3138,13 +3170,7 @@ begin
     return false;
   end if;
 
-  if v_uid <> v_order.seller_id and not exists (
-    select 1
-    from public.profiles p
-    where p.user_id = v_uid
-      and p.seller_workspace_owner_id = v_order.seller_id
-      and p.seller_join_status = 'approved'
-  ) then
+  if public.seller_business_id(v_uid) is distinct from v_order.seller_id then
     return false;
   end if;
 

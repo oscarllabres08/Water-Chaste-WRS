@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { Navigate, Route, Routes } from 'react-router-dom';
 
 import { useAuth } from './auth/AuthProvider';
@@ -17,8 +18,11 @@ import { EwalletPage } from './pages/EwalletPage';
 
 function ProtectedAdmin() {
   const { user, loading, profileLoading, isStoreOwner, isApprovedStaff } = useAuth();
+  const shown = useRef(false);
+  const allowed = Boolean(user && (isStoreOwner || isApprovedStaff));
+  if (!loading && !profileLoading && allowed) shown.current = true;
 
-  if (loading || profileLoading) {
+  if (!shown.current && (loading || profileLoading)) {
     return (
       <div className="auth-loading">
         <p style={{ fontWeight: 700 }}>Loading admin session…</p>

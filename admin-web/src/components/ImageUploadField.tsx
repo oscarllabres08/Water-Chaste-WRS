@@ -65,7 +65,7 @@ export function ImageUploadField({ label = 'Product image', hint, disabled, prev
             </span>
             <div className="upload-placeholder-copy">
               <span className="upload-title">Tap to upload or drag &amp; drop</span>
-              <span className="upload-sub">PNG, JPG, WebP · max ~450 KB</span>
+              <span className="upload-sub">PNG, JPG, WebP · compressed before save</span>
             </div>
           </div>
         )}

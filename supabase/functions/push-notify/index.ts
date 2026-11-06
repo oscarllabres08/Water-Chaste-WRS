@@ -124,7 +124,7 @@ async function getGoogleAccessTokenFromServiceAccount(serviceAccountJson: string
   return String((body as any).access_token ?? "");
 }
 
-const FCM_CHANNEL_SOUND = "wrs_alerts_v3";
+const FCM_CHANNEL_SOUND = "wrs_alerts_v4";
 const FCM_CHANNEL_SILENT = "wrs_silent_v1";
 const FCM_SOUND_RAW = "notification";
 
@@ -253,7 +253,7 @@ async function sendFcmMessage({
     notification_priority: "PRIORITY_MAX",
     visibility: "PUBLIC",
     default_vibrate_timings: true,
-    default_sound: soundEnabled,
+    default_sound: false,
   };
   if (soundEnabled) {
     androidNotification.sound = FCM_SOUND_RAW;

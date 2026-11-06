@@ -48,6 +48,7 @@ export async function fetchCustomerLoyaltySummary(supabase: SupabaseClient, cust
       .select('user_id')
       .eq('role', 'seller')
       .eq('seller_team_role', 'owner')
+      .order('created_at', { ascending: true })
       .limit(1)
       .maybeSingle();
     redeemSellerId = owner?.user_id ?? null;

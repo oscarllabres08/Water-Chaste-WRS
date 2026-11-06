@@ -137,7 +137,7 @@ export default function RewardsTabScreen() {
 
   if (!user) {
     return (
-      <Screen style={{ padding: theme.spacing.md }}>
+      <Screen style={{ padding: theme.spacing.md }} enter>
         <Text variant="title" weight="extrabold">
           Vouchers & Redeem
         </Text>
@@ -156,7 +156,7 @@ export default function RewardsTabScreen() {
   const progressPct = Math.min(100, (points / 10) * 100);
 
   return (
-    <Screen style={{ padding: 0 }}>
+    <Screen style={{ padding: 0 }} enter>
       <Modal visible={resultOpen} transparent animationType="fade" onRequestClose={() => setResultOpen(false)}>
         <Pressable
           onPress={() => setResultOpen(false)}

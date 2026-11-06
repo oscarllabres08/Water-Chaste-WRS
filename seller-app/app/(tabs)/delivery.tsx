@@ -554,6 +554,7 @@ export default function DeliveryScreen() {
                 order={order}
                 isNew={isNewOrder(order.id)}
                 distanceReference={distanceReference}
+                avatarUrl={publicWrsAssetUrl(avatarPathByCustomerId[order.customer_id])}
                 onOpen={() => openOrder(order.id)}
               />
             </Animated.View>
@@ -757,11 +758,13 @@ function ActiveDeliveryCard({
   order,
   isNew = false,
   distanceReference,
+  avatarUrl,
   onOpen,
 }: {
   order: OrderRow;
   isNew?: boolean;
   distanceReference: { lat: number; lng: number } | null;
+  avatarUrl?: string | null;
   onOpen: () => void;
 }) {
   const p = theme.colors.primary;
@@ -769,6 +772,7 @@ function ActiveDeliveryCard({
   const distanceLabel = formatOrderDistance(km);
   const statusLabel = order.status.replaceAll('_', ' ');
   const hasPin = order.latitude != null && order.longitude != null;
+  const initial = (order.customer_name.trim()[0] ?? '?').toUpperCase();
 
   return (
     <Card
@@ -796,14 +800,21 @@ function ActiveDeliveryCard({
             style={{
               width: 42,
               height: 42,
-              borderRadius: 14,
+              borderRadius: 21,
+              overflow: 'hidden',
               backgroundColor: 'rgba(0,114,240,0.1)',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
             }}
           >
-            <Ionicons name="navigate-outline" size={22} color={p} />
+            {avatarUrl ? (
+              <Image source={{ uri: avatarUrl }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+            ) : (
+              <Text weight="extrabold" style={{ color: p, fontSize: 16 }}>
+                {initial}
+              </Text>
+            )}
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>

@@ -7,7 +7,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as Location from 'expo-location';
 
 import { supabase } from '../../../lib/supabase';
-import { prepareImageForUpload } from '../../../lib/prepareImageForUpload';
+import { imageUploadPresets, prepareImageForUpload } from '../../../lib/prepareImageForUpload';
 import { readPreparedImageBytes } from '../../../lib/readPreparedImageBytes';
 import { useAuth } from '../../../providers/AuthProvider';
 import { Screen } from '../../../ui/components/Screen';
@@ -91,7 +91,7 @@ export default function BusinessProfileScreen() {
     if (res.canceled) return;
     try {
       const asset = res.assets[0];
-      const prepared = await prepareImageForUpload(asset.uri);
+      const prepared = await prepareImageForUpload(asset.uri, imageUploadPresets.logo);
       const path = `${storeProfileUserId}/logo/${Date.now()}.jpg`;
       const bytes = await readPreparedImageBytes(prepared);
       const { error: upErr } = await supabase.storage.from(BUCKET).upload(path, bytes, {

@@ -42,7 +42,7 @@ export function TextField({
 
   return (
     <View style={[{ gap: 6 }, style as any]}>
-      <Text variant="muted" weight="bold">
+      <Text variant="chip" weight="semibold" style={{ color: theme.colors.muted }}>
         {label}
       </Text>
       {usePasswordToggle ? (

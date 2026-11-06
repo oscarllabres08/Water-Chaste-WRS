@@ -21,11 +21,18 @@ function readStoredTheme(): Theme {
   }
 }
 
+function isAuthPath() {
+  const path = window.location.pathname;
+  return path === '/auth' || path.startsWith('/auth/');
+}
+
 function applyTheme(theme: Theme) {
-  if (theme === 'dark') {
+  if (theme === 'dark' && !isAuthPath()) {
     document.documentElement.setAttribute('data-theme', 'dark');
+    document.documentElement.style.colorScheme = 'dark';
   } else {
     document.documentElement.removeAttribute('data-theme');
+    document.documentElement.style.colorScheme = 'light';
   }
 }
 
