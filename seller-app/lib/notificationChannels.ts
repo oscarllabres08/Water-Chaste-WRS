@@ -40,7 +40,7 @@ export async function ensureAndroidNotificationChannels(): Promise<void> {
     },
     enableVibrate: true,
     vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#063A7A',
+    lightColor: '#0B3A96',
     showBadge: true,
   });
 
@@ -55,7 +55,7 @@ export async function ensureAndroidNotificationChannels(): Promise<void> {
     },
     enableVibrate: true,
     vibrationPattern: [0, 250, 250, 250],
-    lightColor: '#063A7A',
+    lightColor: '#0B3A96',
     showBadge: true,
   });
 }

@@ -1,7 +1,7 @@
 export type PosPaymentMethod = 'cash' | 'gcash';
 
 export function normalizeCustomerName(name: string): string {
-  return name.trim().toLowerCase();
+  return name.trim().replace(/\s+/g, ' ').toLowerCase();
 }
 
 export function posCustomerRowId(normalizedName: string): string {

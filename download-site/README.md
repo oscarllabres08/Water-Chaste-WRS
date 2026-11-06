@@ -9,15 +9,15 @@ The Seller APK is PIN-protected. The PIN is **not** stored in this repo — set 
 Edit `js/config.js` before deploy (Supabase URL + anon key only):
 
 ```js
-window.ZODA_DOWNLOAD_CFG = {
+window.WATER_CHASTE_DOWNLOAD_CFG = {
   customerApkUrl: '',
   sellerApkUrl: '',
-  supabaseUrl: 'https://YOUR_PROJECT.supabase.co',
-  supabaseAnonKey: 'YOUR_ANON_KEY',
+  supabaseUrl: 'https://hjvwwxdyyugjchkeolyp.supabase.co',
+  supabaseAnonKey: 'sb_publishable_syjSQ1DOnVQndCcAzDLRgA_icj7QHx2',
 };
 ```
 
-Run `supabase/patches/seller-download-pin.sql` in Supabase SQL Editor once.
+The download PIN is included in `supabase/water-chaste.sql`. Run that file once.
 
 ## After each new build
 
@@ -25,7 +25,7 @@ Run `supabase/patches/seller-download-pin.sql` in Supabase SQL Editor once.
 2. Run:
 
 ```powershell
-cd "c:\Users\Oscar Jomer\Documents\WRS Aquabeast\Aquabeast"
+cd "c:\Users\Oscar Jomer\Documents\WRS Water Chaste\WRS Water Waste"
 git add download-site/customer-app.apk download-site/seller-app.apk download-site/
 .\scripts\push-download-site.ps1 "Update APK files"
 ```

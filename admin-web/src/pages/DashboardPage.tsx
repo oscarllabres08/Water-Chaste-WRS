@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 
-import { PageHeader } from '../components/PageHeader';
+import { SalesBarChart } from '../components/SalesCharts';
+import { AlertIcon, BoxIcon, DropIcon, PeopleIcon, PesoIcon, ReceiptIcon, StarIcon, TrendIcon } from '../components/UiIcons';
 import { useAuth } from '../auth/AuthProvider';
 import { todayDateInputValue } from '../lib/expenseTypes';
 import { money } from '../lib/format';
-import { orderCountsTowardOnlineSales, posCountsTowardWalkInSales, saleRecordedAt } from '../lib/orderSalesEligible';
 import { LOW_STOCK_THRESHOLD } from '../lib/inventoryStock';
+import { orderCountsTowardOnlineSales, posCountsTowardWalkInSales, saleRecordedAt } from '../lib/orderSalesEligible';
+import { loadSalesDashboard, type TimelinePoint } from '../lib/salesReportData';
 import { supabase } from '../lib/supabase';
 
 type RecentOrderRow = {
@@ -16,7 +18,31 @@ type RecentOrderRow = {
   customer_name: string;
   created_at: string;
   payment_settled: boolean;
+  amount: number;
 };
+
+type SnapshotProduct = {
+  id: string;
+  name: string;
+  category: string;
+  stock_quantity: number | null;
+};
+
+function lineAmount(items: { unit_price: number; quantity: number }[] | null | undefined) {
+  return (items ?? []).reduce((sum, item) => sum + Number(item.unit_price) * Number(item.quantity), 0);
+}
+
+function greeting() {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
+function pctChange(current: number, previous: number) {
+  if (previous === 0) return current === 0 ? 0 : 100;
+  return Math.round(((current - previous) / previous) * 100);
+}
 
 const RECENT_ORDERS_PAGE = 10;
 
@@ -26,6 +52,7 @@ function mapOnlineRecent(o: {
   customer_name: string;
   created_at: string;
   payment_settled: boolean | null;
+  order_items?: { unit_price: number; quantity: number }[] | null;
 }): RecentOrderRow {
   return {
     id: o.id,
@@ -34,6 +61,7 @@ function mapOnlineRecent(o: {
     customer_name: o.customer_name?.trim() || 'Customer',
     created_at: o.created_at,
     payment_settled: o.payment_settled === true,
+    amount: lineAmount(o.order_items),
   };
 }
 
@@ -42,6 +70,7 @@ function mapWalkInRecent(s: {
   customer_name: string | null;
   created_at: string;
   payment_settled: boolean | null;
+  pos_sale_items?: { unit_price: number; quantity: number }[] | null;
 }): RecentOrderRow {
   return {
     id: s.id,
@@ -50,6 +79,7 @@ function mapWalkInRecent(s: {
     customer_name: s.customer_name?.trim() || 'Walk-in customer',
     created_at: s.created_at,
     payment_settled: s.payment_settled === true,
+    amount: lineAmount(s.pos_sale_items),
   };
 }
 
@@ -71,6 +101,12 @@ export function DashboardPage() {
   const [productCount, setProductCount] = useState(0);
   const [lowStockCount, setLowStockCount] = useState(0);
   const [expensesToday, setExpensesToday] = useState(0);
+  const [ordersToday, setOrdersToday] = useState(0);
+  const [loyaltyMembers, setLoyaltyMembers] = useState(0);
+  const [borrowedContainers, setBorrowedContainers] = useState(0);
+  const [borrowedCustomers, setBorrowedCustomers] = useState(0);
+  const [timeline, setTimeline] = useState<TimelinePoint[]>([]);
+  const [snapshot, setSnapshot] = useState<SnapshotProduct[]>([]);
 
   const fetchRecentOrders = useCallback(
     async (offset: number) => {
@@ -79,13 +115,13 @@ export function DashboardPage() {
       const [ordersRes, posRes] = await Promise.all([
         supabase
           .from('orders')
-          .select('id,status,customer_name,created_at,payment_settled')
+          .select('id,status,customer_name,created_at,payment_settled,order_items(unit_price,quantity)')
           .eq('seller_id', businessId)
           .order('created_at', { ascending: false })
           .limit(fetchLimit),
         supabase
           .from('pos_sales')
-          .select('id,customer_name,created_at,payment_settled')
+          .select('id,customer_name,created_at,payment_settled,pos_sale_items(unit_price,quantity)')
           .eq('seller_id', businessId)
           .order('created_at', { ascending: false })
           .limit(fetchLimit),
@@ -111,7 +147,8 @@ export function DashboardPage() {
 
     const today = todayDateInputValue();
 
-    const [ordersRes, posRes, pendingRes, recentResult, staffRes, prodRes, lowStockRes, expensesRes] = await Promise.all([
+    const [ordersRes, posRes, pendingRes, recentResult, staffRes, prodRes, lowStockRes, expensesRes, ordersCountRes, posCountRes, loyaltyRes, onlineContainersRes, posContainersRes, snapshotRes, week] =
+      await Promise.all([
       supabase
         .from('orders')
         .select('id,status,created_at,payment_settled,payment_settled_at,payment_method,order_items(unit_price,quantity)')
@@ -144,6 +181,18 @@ export function DashboardPage() {
         .eq('seller_id', businessId)
         .eq('business_unit', 'wrs')
         .eq('expense_date', today),
+      supabase.from('orders').select('id', { count: 'exact', head: true }).eq('seller_id', businessId).gte('created_at', from),
+      supabase.from('pos_sales').select('id', { count: 'exact', head: true }).eq('seller_id', businessId).gte('created_at', from),
+      supabase.from('loyalty_balances').select('customer_id', { count: 'exact', head: true }).eq('seller_id', businessId),
+      supabase.from('seller_customer_container_balance').select('outstanding_count').eq('seller_id', businessId).gt('outstanding_count', 0),
+      supabase.from('seller_pos_container_balance').select('outstanding_count').eq('seller_id', businessId).gt('outstanding_count', 0),
+      supabase
+        .from('products')
+        .select('id,name,category,stock_quantity')
+        .eq('seller_id', businessId)
+        .order('name')
+        .limit(6),
+      loadSalesDashboard(businessId, 'week').catch(() => null),
     ]);
 
     let online = 0;
@@ -197,6 +246,15 @@ export function DashboardPage() {
     setStaffPending(staffRes.count ?? 0);
     setProductCount(prodRes.count ?? 0);
     setLowStockCount(lowStockRes.count ?? 0);
+    setOrdersToday((ordersCountRes.count ?? 0) + (posCountRes.count ?? 0));
+    setLoyaltyMembers(loyaltyRes.count ?? 0);
+    const onlineBorrowed = (onlineContainersRes.data ?? []) as { outstanding_count: number }[];
+    const posBorrowed = (posContainersRes.data ?? []) as { outstanding_count: number }[];
+    const borrowedRows = [...onlineBorrowed, ...posBorrowed];
+    setBorrowedContainers(borrowedRows.reduce((sum, row) => sum + Number(row.outstanding_count), 0));
+    setBorrowedCustomers(borrowedRows.length);
+    setSnapshot((snapshotRes.data ?? []) as SnapshotProduct[]);
+    setTimeline(week?.timeline ?? []);
   }, [businessId, fetchRecentOrders]);
 
   async function showMoreRecent() {
@@ -230,137 +288,196 @@ export function DashboardPage() {
     };
   }, [businessId, load]);
 
-  const storeLabel = profile?.display_name?.trim() || 'Your store';
+  const storeLabel = profile?.display_name?.trim() || 'there';
+  const firstName = storeLabel.split(/\s+/)[0] || 'there';
   const grossToday = onlineToday + walkInToday;
   const netIncomeToday = grossToday - expensesToday;
+  const yesterday = timeline.length > 1 ? timeline[timeline.length - 2].total : 0;
+  const salesDelta = pctChange(grossToday, yesterday);
 
   return (
-    <>
-      <PageHeader
-        title="Dashboard"
-        description={`${storeLabel} — connected to Seller & Customer apps (POS, inventory, orders, staff).`}
-      />
-
-      <div className="grid-stats">
-        <div className="stat-card">
-          <div className="label">Online sales today</div>
-          <div className="value">{money(onlineToday)}</div>
+    <div className="station-overview">
+      <div className="station-hero">
+        <div>
+          <p className="station-kicker">{greeting()}, {firstName}</p>
+          <h1>Your station at a glance</h1>
+          <p>Sales, stock, and orders for today.</p>
         </div>
-        <div className="stat-card">
-          <div className="label">Walk-in (POS) today</div>
-          <div className="value">{money(walkInToday)}</div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Pending orders</div>
-          <div className="value">{pendingCount}</div>
-        </div>
-        <div className="stat-card">
-          <div className="label">Products in inventory</div>
-          <div className="value">{productCount}</div>
-        </div>
+        <Link to="/pos" className="btn station-new-sale">
+          + New sale
+        </Link>
       </div>
 
-      <div className="card dashboard-profit-card">
-        <h2 className="dashboard-profit-title">Today&apos;s net income</h2>
-        <div className="grid-stats dashboard-profit-grid">
-          <div className="stat-card">
-            <div className="label">Gross sales</div>
-            <div className="value">{money(grossToday)}</div>
-            <p className="stat-card-sub">Online {money(onlineToday)} · POS {money(walkInToday)}</p>
+      <div className="station-stat-grid">
+        <article className="station-stat tone-blue">
+          <span className="station-stat-icon" aria-hidden><PesoIcon /></span>
+          <div>
+            <span className="station-stat-label">Today&apos;s sales</span>
+            <strong>{money(grossToday)}</strong>
+            <em className={salesDelta < 0 ? 'down' : ''}>{salesDelta > 0 ? '+' : ''}{salesDelta}%</em>
           </div>
-          <div className="stat-card stat-card--expense">
-            <div className="label">Expenses today</div>
-            <div className="value">{money(expensesToday)}</div>
-            <p className="stat-card-sub">
-              <Link to="/expenses">Manage expenses →</Link>
-            </p>
+        </article>
+        <article className="station-stat tone-cyan">
+          <span className="station-stat-icon" aria-hidden><ReceiptIcon /></span>
+          <div>
+            <span className="station-stat-label">Today&apos;s expenses</span>
+            <strong>{money(expensesToday)}</strong>
+            <em><Link to="/expenses">Manage</Link></em>
           </div>
-          <div className={`stat-card stat-card--net${netIncomeToday < 0 ? ' negative' : ''}`}>
-            <div className="label">Net income</div>
-            <div className="value">{money(netIncomeToday)}</div>
-            <p className="stat-card-sub">Gross sales minus expenses (today)</p>
+        </article>
+        <article className="station-stat tone-navy">
+          <span className="station-stat-icon" aria-hidden><TrendIcon /></span>
+          <div>
+            <span className="station-stat-label">Net income</span>
+            <strong>{money(netIncomeToday)}</strong>
+            <em>After expenses</em>
           </div>
-        </div>
+        </article>
+        <article className="station-stat tone-green">
+          <span className="station-stat-icon" aria-hidden><DropIcon /></span>
+          <div>
+            <span className="station-stat-label">Orders today</span>
+            <strong>{ordersToday}</strong>
+            <em>{pendingCount} pending</em>
+          </div>
+        </article>
+        <article className="station-stat tone-cyan">
+          <span className="station-stat-icon" aria-hidden><AlertIcon /></span>
+          <div>
+            <span className="station-stat-label">Low stock</span>
+            <strong>{lowStockCount}</strong>
+            <em>{lowStockCount > 0 ? 'Needs attention' : 'Stock looks fine'}</em>
+          </div>
+        </article>
+        <article className="station-stat tone-blue">
+          <span className="station-stat-icon" aria-hidden><StarIcon /></span>
+          <div>
+            <span className="station-stat-label">Loyalty members</span>
+            <strong>{loyaltyMembers}</strong>
+            <em><Link to="/loyalty">View program</Link></em>
+          </div>
+        </article>
+        <article className="station-stat tone-green">
+          <span className="station-stat-icon" aria-hidden><BoxIcon /></span>
+          <div>
+            <span className="station-stat-label">Borrowed containers</span>
+            <strong>{borrowedContainers}</strong>
+            <em>{borrowedCustomers} customer{borrowedCustomers === 1 ? '' : 's'}</em>
+          </div>
+        </article>
       </div>
 
       {staffPending > 0 ? (
-        <div className="card" style={{ marginBottom: 14, borderColor: 'rgba(255,193,7,0.5)' }}>
+        <div className="card station-note">
           <strong>{staffPending}</strong> staff registration{staffPending === 1 ? '' : 's'} waiting for approval.{' '}
-          <Link to="/staff">Review in Staff Management →</Link>
+          <Link to="/staff">Review in Staff account approval</Link>
         </div>
       ) : null}
 
-      {lowStockCount > 0 ? (
-        <div className="inventory-low-stock-alert card" style={{ marginBottom: 14 }}>
-          <strong>Low stock alert</strong>
-          <p className="muted-block" style={{ margin: '6px 0 0' }}>
-            {lowStockCount} Others item{lowStockCount === 1 ? '' : 's'} at {LOW_STOCK_THRESHOLD} pcs or below.{' '}
-            <Link to="/inventory">Review inventory →</Link>
+      <div className="station-split">
+        <section className="card station-panel">
+          <div className="station-panel-head">
+            <h2>Sales overview</h2>
+            <Link to="/sales">Last 7 days</Link>
+          </div>
+          <SalesBarChart points={timeline} height={148} slotWidth={36} />
+          <p className="station-chart-total">
+            Today <strong>{money(grossToday)}</strong>
           </p>
-        </div>
-      ) : null}
+        </section>
+        <section className="card station-panel">
+          <div className="station-panel-head">
+            <h2>Quick actions</h2>
+          </div>
+          <Link to="/pos" className="station-action">
+            <span className="station-action-icon tone-blue" aria-hidden><PesoIcon /></span>
+            <span>
+              <strong>Start a new sale</strong>
+              <small>Open point of sale</small>
+            </span>
+          </Link>
+          <Link to="/inventory" className="station-action">
+            <span className="station-action-icon tone-cyan" aria-hidden><BoxIcon /></span>
+            <span>
+              <strong>Check inventory</strong>
+              <small>{productCount} product{productCount === 1 ? '' : 's'}</small>
+            </span>
+          </Link>
+          <Link to="/customers" className="station-action">
+            <span className="station-action-icon tone-green" aria-hidden><PeopleIcon /></span>
+            <span>
+              <strong>Add a customer</strong>
+              <small>Grow the loyalty list</small>
+            </span>
+          </Link>
+        </section>
+      </div>
 
-      <div className="card">
-        <h2 style={{ margin: '0 0 12px', fontSize: 18 }}>Recent orders</h2>
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Customer</th>
-                <th>Type</th>
-                <th>Status</th>
-                <th>Payment</th>
-                <th>When</th>
-              </tr>
-            </thead>
-            <tbody>
-              {recent.length === 0 ? (
-                <tr>
-                  <td colSpan={5} style={{ color: 'var(--muted)' }}>
-                    No orders yet.
-                  </td>
-                </tr>
-              ) : (
-                recent.map((o) => (
-                  <tr key={`${o.source}-${o.id}`}>
-                    <td>{o.customer_name}</td>
-                    <td>
-                      <span className={`sales-pill ${o.source === 'online' ? 'online' : 'walk'}`}>
-                        {o.source === 'online' ? 'Online' : 'Walk-in'}
-                      </span>
-                    </td>
-                    <td>
-                      <span className={`chip ${o.status === 'pending' ? 'pending' : 'ok'}`}>{o.status}</span>
-                    </td>
-                    <td>
-                      <span className={`sales-pill ${o.payment_settled ? 'paid' : 'unpaid'}`}>
-                        {o.payment_settled ? 'Paid' : 'Unpaid'}
-                      </span>
-                    </td>
-                    <td>{new Date(o.created_at).toLocaleString()}</td>
-                  </tr>
-                ))
-              )}
-            </tbody>
-          </table>
-        </div>
-        {recentHasMore ? (
-          <div style={{ marginTop: 12, textAlign: 'center' }}>
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              disabled={recentLoadingMore}
-              onClick={() => void showMoreRecent()}
-            >
+      <div className="station-split">
+        <section className="card station-panel">
+          <div className="station-panel-head">
+            <h2>Recent transactions</h2>
+            <Link to="/sales">View all</Link>
+          </div>
+          {recent.length === 0 ? (
+            <p className="muted-block">No orders yet.</p>
+          ) : (
+            <ul className="station-tx-list">
+              {recent.slice(0, 5).map((row) => (
+                <li key={`${row.source}-${row.id}`}>
+                  <div>
+                    <strong>{row.customer_name}</strong>
+                    <small>
+                      {row.payment_settled ? 'Paid' : 'Unpaid'} · {new Date(row.created_at).toLocaleDateString()}
+                    </small>
+                  </div>
+                  <div className="station-tx-end">
+                    <b>{money(row.amount)}</b>
+                    <span className={`sales-pill ${row.payment_settled ? 'paid' : 'unpaid'}`}>
+                      {row.payment_settled ? 'Paid' : 'Unpaid'}
+                    </span>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+          {recentHasMore ? (
+            <button type="button" className="btn btn-ghost btn-sm" disabled={recentLoadingMore} onClick={() => void showMoreRecent()}>
               {recentLoadingMore ? 'Loading…' : 'Show more'}
             </button>
+          ) : null}
+        </section>
+
+        <section className="card station-panel">
+          <div className="station-panel-head">
+            <h2>Inventory snapshot</h2>
+            <Link to="/inventory">Manage</Link>
           </div>
-        ) : null}
-        <p style={{ margin: '12px 0 0', color: 'var(--muted)', fontSize: 13, fontWeight: 600 }}>
-          Online orders come from the <strong>Customer app</strong>; walk-in sales are recorded in{' '}
-          <Link to="/pos">POS</Link>.
-        </p>
+          {snapshot.length === 0 ? (
+            <p className="muted-block">No products yet.</p>
+          ) : (
+            <ul className="station-stock-list">
+              {snapshot.map((product) => {
+                const tracked = product.stock_quantity != null;
+                const qty = product.stock_quantity ?? 0;
+                const width = tracked ? Math.max(6, Math.min(100, qty)) : 0;
+                return (
+                  <li key={product.id}>
+                    <div>
+                      <strong>{product.name}</strong>
+                      <small>{product.category === 'water' ? 'Water refill' : 'Others'}</small>
+                    </div>
+                    <div className="station-stock-meter">
+                      {tracked ? <span style={{ width: `${width}%` }} /> : null}
+                      <em>{tracked ? `${qty} left` : 'Not tracked'}</em>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </section>
       </div>
-    </>
+    </div>
   );
 }

@@ -1,21 +1,21 @@
 {
   "project_info": {
-    "project_number": "641806904791",
-    "project_id": "aquabeast-wrs",
-    "storage_bucket": "aquabeast-wrs.firebasestorage.app"
+    "project_number": "1075347937522",
+    "project_id": "water-chaste-wrs",
+    "storage_bucket": "water-chaste-wrs.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:641806904791:android:5b1e789399e76009776f92",
+        "mobilesdk_app_id": "1:1075347937522:android:6555aca9d8fed969e3986b",
         "android_client_info": {
-          "package_name": "com.aquabeast.customerapp"
+          "package_name": "com.waterchaste.customer"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB1hqZ9GiV36oVzXuOQTIHpY9oD2raBUsQ"
+          "current_key": "AIzaSyD1wQblpcIbDXbUYhta2GPxVd_0TuxvuCk"
         }
       ],
       "services": {
@@ -26,15 +26,15 @@
     },
     {
       "client_info": {
-        "mobilesdk_app_id": "1:641806904791:android:bb7e8fb2b5cf00be776f92",
+        "mobilesdk_app_id": "1:1075347937522:android:21d47e5cbb4b3cb5e3986b",
         "android_client_info": {
-          "package_name": "com.aquabeast.sellerapp"
+          "package_name": "com.waterchaste.rider"
         }
       },
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyB1hqZ9GiV36oVzXuOQTIHpY9oD2raBUsQ"
+          "current_key": "AIzaSyD1wQblpcIbDXbUYhta2GPxVd_0TuxvuCk"
         }
       ],
       "services": {
@@ -45,4 +45,4 @@
     }
   ],
   "configuration_version": "1"
-}
+} 

@@ -31,6 +31,7 @@ type CustomerRow = {
   containerIdentifierNotes: string | null;
   isPosOnly: boolean;
   posNameKey: string | null;
+  profileIds: string[];
 };
 
 type HistoryItem = {
@@ -144,6 +145,7 @@ export function CustomersPage() {
   const [paymentBusyKey, setPaymentBusyKey] = useState<string | null>(null);
   const [removeTarget, setRemoveTarget] = useState<CustomerRow | null>(null);
   const [removeBusy, setRemoveBusy] = useState(false);
+  const [removeNotice, setRemoveNotice] = useState<string | null>(null);
 
   useEffect(() => {
     if (!businessId || !selectedEntry || selectedEntry.source !== 'order') return;
@@ -294,7 +296,8 @@ export function CustomersPage() {
     const hiddenPosKeys = new Set<string>();
     if (!hiddenPosRes.error) {
       for (const row of (hiddenPosRes.data ?? []) as { customer_name_key: string }[]) {
-        hiddenPosKeys.add(row.customer_name_key);
+        const key = normalizeCustomerName(row.customer_name_key);
+        if (key) hiddenPosKeys.add(key);
       }
     }
 
@@ -324,14 +327,17 @@ export function CustomersPage() {
         outstanding_count: number;
         identifier_notes: string | null;
       };
-      balByPosKey.set(row.customer_name_key, {
-        outstanding_count: Math.max(0, row.outstanding_count ?? 0),
-        identifier_notes: row.identifier_notes,
+      const key = normalizeCustomerName(row.customer_name_key);
+      if (!key) continue;
+      const prev = balByPosKey.get(key);
+      balByPosKey.set(key, {
+        outstanding_count: (prev?.outstanding_count ?? 0) + Math.max(0, row.outstanding_count ?? 0),
+        identifier_notes: prev?.identifier_notes || row.identifier_notes,
       });
     }
 
-    const mergedPosKeys = new Set<string>();
-    const list: CustomerRow[] = (customers ?? []).map((c) => {
+    const byName = new Map<string, CustomerRow>();
+    for (const c of customers ?? []) {
       const p = c as {
         user_id: string;
         display_name: string | null;
@@ -339,38 +345,78 @@ export function CustomersPage() {
         address: string | null;
         avatar_path: string | null;
       };
-      const a = agg.get(p.user_id);
       const displayName = p.display_name?.trim() || 'Customer';
       const nameKey = normalizeCustomerName(displayName);
-      const pos = nameKey ? posAgg.get(nameKey) : undefined;
-      if (pos && nameKey) mergedPosKeys.add(nameKey);
-
+      if (!nameKey) continue;
+      const a = agg.get(p.user_id);
       const bal = balByCustomer.get(p.user_id);
-      const outstanding = bal?.outstanding_count ?? 0;
-      const unpaidPosCount = pos?.unpaidCount ?? 0;
-      const unpaidPosTotal = pos?.unpaidTotal ?? 0;
+      const existing = byName.get(nameKey);
+      if (!existing) {
+        byName.set(nameKey, {
+          id: p.user_id,
+          name: displayName,
+          avatarPath: p.avatar_path ?? null,
+          phone: p.phone?.trim() || '—',
+          address: p.address?.trim() || '—',
+          orderCount: a?.count ?? 0,
+          lastOrder: a?.last ?? null,
+          hasUnpaidUtang: a?.hasUnpaidUtang ?? false,
+          unpaidDeliveredCount: a?.unpaidDeliveredCount ?? 0,
+          unpaidDeliveredTotal: a?.unpaidDeliveredTotal ?? 0,
+          totalSpent: a?.totalSpent ?? 0,
+          containersOutstanding: Math.max(0, bal?.outstanding_count ?? 0),
+          containerIdentifierNotes: bal?.identifier_notes?.trim() || null,
+          isPosOnly: false,
+          posNameKey: nameKey,
+          profileIds: [p.user_id],
+        });
+        continue;
+      }
+      existing.profileIds.push(p.user_id);
+      existing.orderCount += a?.count ?? 0;
+      existing.totalSpent += a?.totalSpent ?? 0;
+      existing.unpaidDeliveredCount += a?.unpaidDeliveredCount ?? 0;
+      existing.unpaidDeliveredTotal += a?.unpaidDeliveredTotal ?? 0;
+      existing.hasUnpaidUtang = existing.hasUnpaidUtang || (a?.hasUnpaidUtang ?? false);
+      existing.containersOutstanding += Math.max(0, bal?.outstanding_count ?? 0);
+      if (a?.last && (!existing.lastOrder || a.last > existing.lastOrder)) existing.lastOrder = a.last;
+      if (existing.phone === '—' && p.phone?.trim()) existing.phone = p.phone.trim();
+      if (existing.address === '—' && p.address?.trim()) existing.address = p.address.trim();
+      if (!existing.avatarPath && p.avatar_path) existing.avatarPath = p.avatar_path;
+      const extraNotes = bal?.identifier_notes?.trim();
+      if (extraNotes && existing.containerIdentifierNotes && !existing.containerIdentifierNotes.includes(extraNotes)) {
+        existing.containerIdentifierNotes = `${existing.containerIdentifierNotes}, ${extraNotes}`;
+      } else if (extraNotes && !existing.containerIdentifierNotes) {
+        existing.containerIdentifierNotes = extraNotes;
+      }
+    }
 
-      return {
-        id: p.user_id,
-        name: displayName,
-        avatarPath: p.avatar_path ?? null,
-        phone: p.phone?.trim() || '—',
-        address: p.address?.trim() || '—',
-        orderCount: (a?.count ?? 0) + (pos?.count ?? 0),
-        lastOrder: [a?.last, pos?.last].filter(Boolean).sort().reverse()[0] ?? null,
-        hasUnpaidUtang: a?.hasUnpaidUtang ?? false,
-        unpaidDeliveredCount: (a?.unpaidDeliveredCount ?? 0) + unpaidPosCount,
-        unpaidDeliveredTotal: (a?.unpaidDeliveredTotal ?? 0) + unpaidPosTotal,
-        totalSpent: (a?.totalSpent ?? 0) + (pos?.totalSpent ?? 0),
-        containersOutstanding: outstanding,
-        containerIdentifierNotes: outstanding > 0 ? bal?.identifier_notes?.trim() || null : null,
-        isPosOnly: false,
-        posNameKey: nameKey || null,
-      };
-    });
+    const list: CustomerRow[] = [...byName.values()];
+
+    for (const row of list) {
+      if (!row.posNameKey) continue;
+      const pos = posAgg.get(row.posNameKey);
+      if (pos) {
+        row.orderCount += pos.count;
+        row.totalSpent += pos.totalSpent;
+        row.unpaidDeliveredCount += pos.unpaidCount;
+        row.unpaidDeliveredTotal += pos.unpaidTotal;
+        if (!row.lastOrder || pos.last > row.lastOrder) row.lastOrder = pos.last;
+      }
+      const posBal = balByPosKey.get(row.posNameKey);
+      if (posBal) {
+        row.containersOutstanding += posBal.outstanding_count;
+        const notes = posBal.identifier_notes?.trim();
+        if (notes && row.containerIdentifierNotes && !row.containerIdentifierNotes.includes(notes)) {
+          row.containerIdentifierNotes = `${row.containerIdentifierNotes}, ${notes}`;
+        } else if (notes && !row.containerIdentifierNotes) {
+          row.containerIdentifierNotes = notes;
+        }
+      }
+    }
 
     for (const [key, pos] of posAgg) {
-      if (mergedPosKeys.has(key)) continue;
+      if (byName.has(key)) continue;
       const posBal = balByPosKey.get(key);
       const posOutstanding = posBal?.outstanding_count ?? 0;
       list.push({
@@ -389,11 +435,42 @@ export function CustomersPage() {
         containerIdentifierNotes: posOutstanding > 0 ? posBal?.identifier_notes?.trim() || null : null,
         isPosOnly: true,
         posNameKey: key,
+        profileIds: [],
       });
     }
 
+    const savedPosRes = await supabase
+      .from('seller_pos_customers')
+      .select('customer_name_key, display_name')
+      .eq('seller_id', businessId);
+    if (!savedPosRes.error) {
+      for (const row of (savedPosRes.data ?? []) as { customer_name_key: string; display_name: string | null }[]) {
+        const key = normalizeCustomerName(row.customer_name_key);
+        const existingBalance = balByPosKey.get(key);
+        if (!key || byName.has(key) || posAgg.has(key) || (existingBalance?.outstanding_count ?? 0) > 0) continue;
+        list.push({
+          id: posCustomerRowId(key),
+          name: row.display_name?.trim() || key,
+          avatarPath: null,
+          phone: 'Walk-in POS',
+          address: '—',
+          orderCount: 0,
+          lastOrder: null,
+          hasUnpaidUtang: false,
+          unpaidDeliveredCount: 0,
+          unpaidDeliveredTotal: 0,
+          totalSpent: 0,
+          containersOutstanding: 0,
+          containerIdentifierNotes: null,
+          isPosOnly: true,
+          posNameKey: key,
+          profileIds: [],
+        });
+      }
+    }
+
     for (const [key, bal] of balByPosKey) {
-      if (mergedPosKeys.has(key) || posAgg.has(key)) continue;
+      if (byName.has(key) || posAgg.has(key)) continue;
       if ((bal.outstanding_count ?? 0) < 1) continue;
       list.push({
         id: posCustomerRowId(key),
@@ -414,6 +491,7 @@ export function CustomersPage() {
         containerIdentifierNotes: bal.identifier_notes?.trim() || null,
         isPosOnly: true,
         posNameKey: key,
+        profileIds: [],
       });
     }
 
@@ -424,7 +502,12 @@ export function CustomersPage() {
       return !hiddenCustomerIds.has(r.id);
     });
 
-    visible.sort((a, b) => b.orderCount - a.orderCount);
+    visible.sort((a, b) => {
+      const aFresh = a.isPosOnly && a.orderCount === 0 && a.containersOutstanding === 0 ? 1 : 0;
+      const bFresh = b.isPosOnly && b.orderCount === 0 && b.containersOutstanding === 0 ? 1 : 0;
+      if (aFresh !== bFresh) return bFresh - aFresh;
+      return b.orderCount - a.orderCount;
+    });
     setRows(visible);
     setLoading(false);
   }, [businessId]);
@@ -456,6 +539,11 @@ export function CustomersPage() {
         { event: '*', schema: 'public', table: 'seller_hidden_pos_customers', filter: `seller_id=eq.${businessId}` },
         () => void load()
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'seller_pos_customers', filter: `seller_id=eq.${businessId}` },
+        () => void load()
+      )
       .subscribe();
     return () => {
       supabase.removeChannel(ch);
@@ -473,11 +561,12 @@ export function CustomersPage() {
       const nameKey = customer.posNameKey ?? posNameFromRowId(customer.id);
 
       if (!customer.isPosOnly) {
+        const ids = customer.profileIds.length > 0 ? customer.profileIds : [customer.id];
         const { data, error: err } = await supabase
           .from('orders')
           .select(ORDER_HISTORY_SELECT)
           .eq('seller_id', businessId)
-          .eq('customer_id', customer.id)
+          .in('customer_id', ids)
           .order('created_at', { ascending: false })
           .limit(200);
         if (err) throw err;
@@ -555,11 +644,17 @@ export function CustomersPage() {
         });
         if (err) throw err;
       } else {
-        const { error: err } = await supabase.from('seller_hidden_customers').insert({
-          seller_id: businessId,
-          customer_id: removeTarget.id,
+        const { data, error: err } = await supabase.rpc('owner_remove_customer_from_store', {
+          p_customer_id: removeTarget.id,
         });
         if (err) throw err;
+        const res = data as { ok?: boolean; message?: string; error?: string } | null;
+        if (res && res.ok === false) {
+          throw new Error(res.message ?? res.error ?? 'Could not remove customer');
+        }
+        if (res?.message) {
+          setRemoveNotice(res.message);
+        }
       }
       if (historyFor?.id === removeTarget.id) {
         closeHistory();
@@ -659,36 +754,43 @@ export function CustomersPage() {
         description="Customer list, walk-in POS names, borrowed containers, and order history."
       />
       {error ? <p className="error-text">{error}</p> : null}
+      {removeNotice ? <p className="success-text module-alert">{removeNotice}</p> : null}
 
-      <div className="filter-tabs">
-        {(['all', 'paid', 'unpaid'] as PayFilter[]).map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={payFilter === f ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-            onClick={() => setPayFilter(f)}
-          >
-            {f === 'all' ? 'All' : f === 'paid' ? 'Paid' : 'Unpaid / Utang'}
-          </button>
-        ))}
-      </div>
-
-      <div className="filter-tabs" style={{ marginTop: 8 }}>
-        {(['all', 'borrowed'] as ContainerFilter[]).map((f) => (
-          <button
-            key={f}
-            type="button"
-            className={containerFilter === f ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-            onClick={() => setContainerFilter(f)}
-          >
-            {f === 'all' ? 'All customers' : 'Borrowed containers'}
-          </button>
-        ))}
-      </div>
-
-      <div className="field" style={{ maxWidth: 360 }}>
-        <label htmlFor="q">Search</label>
-        <input id="q" placeholder="Name or phone" value={query} onChange={(e) => setQuery(e.target.value)} />
+      <div className="customer-toolbar card card-flat">
+        <label className="customer-search" htmlFor="q">
+          <span>Search</span>
+          <input id="q" placeholder="Name or phone" value={query} onChange={(e) => setQuery(e.target.value)} />
+        </label>
+        <div className="customer-filter-group">
+          <span>Payment</span>
+          <div className="customer-pills" role="group" aria-label="Payment filter">
+            {(['all', 'paid', 'unpaid'] as PayFilter[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`customer-pill${payFilter === f ? ' active' : ''}`}
+                onClick={() => setPayFilter(f)}
+              >
+                {f === 'all' ? 'All' : f === 'paid' ? 'Paid' : 'Unpaid'}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="customer-filter-group">
+          <span>Containers</span>
+          <div className="customer-pills" role="group" aria-label="Container filter">
+            {(['all', 'borrowed'] as ContainerFilter[]).map((f) => (
+              <button
+                key={f}
+                type="button"
+                className={`customer-pill${containerFilter === f ? ' active' : ''}`}
+                onClick={() => setContainerFilter(f)}
+              >
+                {f === 'all' ? 'All' : 'Borrowed'}
+              </button>
+            ))}
+          </div>
+        </div>
       </div>
 
       <div className="card">
@@ -889,27 +991,33 @@ export function CustomersPage() {
 
       <ConfirmModal
         open={removeTarget != null}
-        title="Remove customer from list?"
+        title="Remove customer?"
         message={
           removeTarget ? (
             <>
               Remove <strong>{removeTarget.name}</strong> from your customer list?
+              {removeTarget.isPosOnly ? (
+                <> Walk-in name only — POS sales history stays in your records.</>
+              ) : removeTarget.orderCount > 0 ? (
+                <>
+                  {' '}
+                  They have <strong>{removeTarget.orderCount}</strong> order
+                  {removeTarget.orderCount === 1 ? '' : 's'} on record — their{' '}
+                  <strong>Supabase login will stay</strong> so order history is preserved. They disappear from your list
+                  only.
+                </>
+              ) : (
+                <>
+                  {' '}
+                  No orders on record — their <strong>login account can be deleted</strong> from Supabase as well.
+                </>
+              )}
               {removeTarget.containersOutstanding > 0 ? (
                 <>
                   {' '}
-                  They still have <strong>{removeTarget.containersOutstanding}</strong> borrowed container
-                  {removeTarget.containersOutstanding === 1 ? '' : 's'} on record.
+                  Borrowed containers: <strong>{removeTarget.containersOutstanding}</strong>.
                 </>
               ) : null}
-              {removeTarget.unpaidDeliveredCount > 0 ? (
-                <>
-                  {' '}
-                  They still have <strong>{removeTarget.unpaidDeliveredCount}</strong> unpaid sale
-                  {removeTarget.unpaidDeliveredCount === 1 ? '' : 's'}.
-                </>
-              ) : null}{' '}
-              Past orders and POS sales stay in your store records; this only hides them from the list (same as Seller
-              app).
             </>
           ) : null
         }

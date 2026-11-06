@@ -210,10 +210,10 @@ export default function OrderDetailsScreen() {
                     borderRadius: 999,
                     borderWidth: 1,
                     borderColor: theme.colors.border,
-                    backgroundColor: 'rgba(18,101,214,0.06)',
+                    backgroundColor: 'rgba(0,114,240,0.06)',
                   }}
                 >
-                  <Text variant="chip" weight="extrabold" style={{ color: 'rgba(10,27,55,0.8)' }}>
+                  <Text variant="chip" weight="extrabold" style={{ color: 'rgba(7,20,46,0.8)' }}>
                     {statusLabel(order.status)}
                   </Text>
                 </View>
@@ -284,7 +284,7 @@ export default function OrderDetailsScreen() {
                     borderWidth: 1,
                     borderColor: theme.colors.border,
                     borderRadius: 14,
-                    backgroundColor: 'rgba(18,101,214,0.04)',
+                    backgroundColor: 'rgba(0,114,240,0.04)',
                     padding: 12,
                   }}
                 >
@@ -312,12 +312,12 @@ export default function OrderDetailsScreen() {
                             borderRadius: 14,
                             borderWidth: 1,
                             borderColor: theme.colors.border,
-                            backgroundColor: 'rgba(18,101,214,0.04)',
+                            backgroundColor: 'rgba(0,114,240,0.04)',
                           }}
                           resizeMode="contain"
                         />
                       ) : (
-                        <View style={{ width: 48, height: 48, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: 'rgba(18,101,214,0.06)' }} />
+                        <View style={{ width: 48, height: 48, borderRadius: 14, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: 'rgba(0,114,240,0.06)' }} />
                       )}
                       <View style={{ flex: 1 }}>
                         <Text weight="extrabold">{i.product_name}</Text>
@@ -325,7 +325,7 @@ export default function OrderDetailsScreen() {
                           {i.quantity} × {formatMoney(i.unit_price)}
                         </Text>
                       </View>
-                      <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: 'rgba(18,101,214,0.06)' }}>
+                      <View style={{ paddingHorizontal: 10, paddingVertical: 6, borderRadius: 10, borderWidth: 1, borderColor: theme.colors.border, backgroundColor: 'rgba(0,114,240,0.06)' }}>
                         <Text weight="extrabold">{formatMoney(i.unit_price * i.quantity)}</Text>
                       </View>
                     </View>

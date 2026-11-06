@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 
 import { CategoryBarChart, SalesBarChart, SalesDonutChart } from '../components/SalesCharts';
+import { CalendarIcon } from '../components/UiIcons';
 
 import { useAuth } from '../auth/AuthProvider';
 
@@ -214,14 +215,14 @@ export function SalesAnalyticsPage() {
     try {
       if (displayGranularity === 'day') {
         const payload = await fetchDayExportPayload(businessId, filterYear, filterMonth, filterDay);
-        await downloadDaySpreadsheet(payload, `zoda-wrs-sales-${selectedDate}.xlsx`);
+        await downloadDaySpreadsheet(payload, `water-chaste-sales-${selectedDate}.xlsx`);
       } else if (displayGranularity === 'month') {
         const payload = await fetchMonthExportPayload(businessId, filterYear, filterMonth);
-        const name = `zoda-wrs-sales-${filterYear}-${String(filterMonth + 1).padStart(2, '0')}.xlsx`;
+        const name = `water-chaste-sales-${filterYear}-${String(filterMonth + 1).padStart(2, '0')}.xlsx`;
         await downloadMonthSpreadsheet(payload, name);
       } else {
         const payload = await fetchYearExportPayload(businessId, filterYear);
-        await downloadYearSpreadsheet(payload, `zoda-wrs-sales-${filterYear}.xlsx`);
+        await downloadYearSpreadsheet(payload, `water-chaste-sales-${filterYear}.xlsx`);
       }
     } catch (e) {
       setExportError(e instanceof Error ? e.message : 'Export failed. Check your internet connection and try again.');
@@ -269,7 +270,7 @@ export function SalesAnalyticsPage() {
               }}
             >
               <span className="sales-date-picker-icon" aria-hidden>
-                📅
+                <CalendarIcon />
               </span>
               <strong className="sales-date-picker-value">{pickerLabel}</strong>
               <input

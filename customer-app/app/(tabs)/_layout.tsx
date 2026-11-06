@@ -32,6 +32,7 @@ export default function TabLayout() {
       screenOptions={{
         tabBarActiveTintColor: theme.colors.primary,
         headerShown: false,
+        animation: 'shift',
       }}
     >
       <Tabs.Screen name="index" options={{ title: 'Home' }} />

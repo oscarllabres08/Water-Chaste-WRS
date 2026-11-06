@@ -5,7 +5,6 @@ import { BrowserRouter } from 'react-router-dom';
 import './index.css';
 import App from './App.tsx';
 import { AuthProvider } from './auth/AuthProvider';
-import { BusinessModeProvider } from './business/BusinessModeProvider';
 import { NotificationsProvider } from './notifications/NotificationsProvider';
 import { ThemeProvider } from './theme/ThemeProvider';
 
@@ -14,11 +13,9 @@ createRoot(document.getElementById('root')!).render(
     <ThemeProvider>
       <AuthProvider>
         <NotificationsProvider>
-          <BusinessModeProvider>
-            <BrowserRouter>
-              <App />
-            </BrowserRouter>
-          </BusinessModeProvider>
+          <BrowserRouter>
+            <App />
+          </BrowserRouter>
         </NotificationsProvider>
       </AuthProvider>
     </ThemeProvider>

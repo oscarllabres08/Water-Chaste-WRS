@@ -3,6 +3,7 @@ import { Link, useLocation } from 'react-router-dom';
 
 import { ConfirmModal } from '../components/ConfirmModal';
 import { ImageUploadField } from '../components/ImageUploadField';
+import { BoxIcon, DropIcon } from '../components/UiIcons';
 import { ModulePageHeader } from '../components/ModulePageHeader';
 import { useAuth } from '../auth/AuthProvider';
 import { money, publicWrsAssetUrl } from '../lib/format';
@@ -49,12 +50,13 @@ export function InventoryPage() {
   const [editImageFile, setEditImageFile] = useState<File | null>(null);
   const [editSaving, setEditSaving] = useState(false);
   const [loyaltyProgramActive, setLoyaltyProgramActive] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ProductRow | null>(null);
   const [deleteBusy, setDeleteBusy] = useState(false);
   const [loyaltyLoading, setLoyaltyLoading] = useState(true);
 
   const branch =
-    profile?.display_name?.trim() ? `${profile.display_name.trim()} · Zoda WRS` : 'Zoda WRS Main Branch';
+    profile?.display_name?.trim() ? `${profile.display_name.trim()} · Water Chaste` : 'Water Chaste Main Branch';
 
   const load = useCallback(async () => {
     if (!businessId) return;
@@ -164,9 +166,11 @@ export function InventoryPage() {
       if (err) throw err;
       setName('');
       setPrice('');
+      setCategory('water');
       setStockQty('');
       setEarnLoyalty(false);
       setNewImageFile(null);
+      setAddOpen(false);
       await load();
     } catch (ex) {
       setError(ex instanceof Error ? ex.message : 'Failed to add product');
@@ -284,86 +288,14 @@ export function InventoryPage() {
         </div>
       ) : null}
 
-      <div className="card card-flat inventory-add-card">
-        <h2 className="inventory-section-title">
-          <PlusIcon /> Add Product
-        </h2>
-        <form className="inventory-form-v2" onSubmit={(e) => void addProduct(e)}>
-          <div className="inventory-form-v2-fields">
-            <div className="field">
-              <label htmlFor="pname">Name</label>
-              <input id="pname" placeholder="e.g. 5-Gallon Water Refill" value={name} onChange={(e) => setName(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="pprice">Price (₱)</label>
-              <input id="pprice" type="number" min={0} step="0.01" placeholder="e.g. 25.00" value={price} onChange={(e) => setPrice(e.target.value)} required />
-            </div>
-            <div className="field">
-              <label htmlFor="pcat">Category</label>
-              <select
-                id="pcat"
-                value={category}
-                onChange={(e) => {
-                  const next = e.target.value as 'water' | 'other';
-                  setCategory(next);
-                  if (next === 'water') setStockQty('');
-                }}
-              >
-                <option value="water">Water Refill</option>
-                <option value="other">Others (containers, accessories)</option>
-              </select>
-            </div>
-            {tracksStock(category) ? (
-              <div className="field">
-                <label htmlFor="pstock">Stock quantity (pcs)</label>
-                <input
-                  id="pstock"
-                  type="number"
-                  min={0}
-                  step={1}
-                  placeholder="e.g. 50"
-                  value={stockQty}
-                  onChange={(e) => setStockQty(e.target.value)}
-                  required
-                />
-                <p className="field-hint">Low stock alert when {LOW_STOCK_THRESHOLD} pcs or less remain.</p>
-              </div>
-            ) : null}
-            <label className={`checkbox-row inventory-loyalty-row${!loyaltyProgramActive ? ' disabled' : ''}`}>
-              <input
-                type="checkbox"
-                checked={loyaltyProgramActive && earnLoyalty}
-                disabled={!loyaltyProgramActive || loyaltyLoading}
-                onChange={(e) => setEarnLoyalty(e.target.checked)}
-              />
-              Available for Loyalty Points
-            </label>
-            {!loyaltyProgramActive && !loyaltyLoading ? (
-              <p className="muted-block inventory-loyalty-hint">
-                Turn on the program in <Link to="/loyalty">Loyalty points</Link> to mark products.
-              </p>
-            ) : null}
-            <button type="submit" className="btn btn-primary btn-water inventory-save-btn" disabled={saving}>
-              <SaveIcon /> {saving ? 'Saving…' : 'Save Product'}
-            </button>
-          </div>
-          <ImageUploadField
-            label="Product Image"
-            hint="Resized & compressed before saving"
-            disabled={saving}
-            onFileSelect={setNewImageFile}
-          />
-        </form>
-      </div>
-
       <div className="card card-flat inventory-list-card">
         <div className="inventory-list-toolbar">
           <div className="inventory-filter-tabs" role="tablist">
             {(
               [
-                { id: 'all' as const, label: 'All', icon: null },
-                { id: 'water' as const, label: 'Water Refill', icon: '💧' },
-                { id: 'other' as const, label: 'Others', icon: '📦' },
+                { id: 'all' as const, label: 'All' },
+                { id: 'water' as const, label: 'Water Refill' },
+                { id: 'other' as const, label: 'Others' },
               ] as const
             ).map((tab) => (
               <button
@@ -374,11 +306,14 @@ export function InventoryPage() {
                 className={`pos-category-tab${listFilter === tab.id ? ' active' : ''}`}
                 onClick={() => setListFilter(tab.id)}
               >
-                {tab.icon ? <span aria-hidden>{tab.icon}</span> : null}
+                {tab.id === 'water' ? <DropIcon /> : tab.id === 'other' ? <BoxIcon /> : null}
                 {tab.label}
               </button>
             ))}
           </div>
+          <button type="button" className="btn btn-primary btn-sm inventory-add-btn" onClick={() => setAddOpen(true)}>
+            <PlusIcon /> Add product
+          </button>
           <div className="inventory-search pos-search">
             <SearchIcon />
             <input
@@ -393,11 +328,11 @@ export function InventoryPage() {
 
         {loading ? <p className="muted-block">Loading catalog…</p> : null}
         {!loading && filtered.length === 0 ? (
-          <p className="muted-block">No products yet. Add your first item above.</p>
+          <p className="muted-block">No products yet. Use Add product to create one.</p>
         ) : null}
 
         {waterProducts.length > 0 ? (
-          <InventorySection title="Water Refill" icon="💧" count={waterProducts.length}>
+          <InventorySection title="Water Refill" icon={<DropIcon />} count={waterProducts.length}>
             {waterProducts.map((p) => (
               <InventoryRow
                 key={p.id}
@@ -414,7 +349,7 @@ export function InventoryPage() {
         ) : null}
 
         {otherProducts.length > 0 ? (
-          <InventorySection title="Others" icon="📦" count={otherProducts.length}>
+          <InventorySection title="Others" icon={<BoxIcon />} count={otherProducts.length}>
             {otherProducts.map((p) => (
               <InventoryRow
                 key={p.id}
@@ -431,87 +366,205 @@ export function InventoryPage() {
         ) : null}
       </div>
 
-      {editing ? (
-        <div className="modal-backdrop" role="presentation" onClick={() => setEditing(null)}>
-          <div className="modal-card" role="dialog" aria-labelledby="edit-product-title" onClick={(e) => e.stopPropagation()}>
-            <h2 id="edit-product-title" style={{ marginTop: 0 }}>
-              Edit product
-            </h2>
-            <form onSubmit={(e) => void saveEdit(e)}>
-              <div className="field">
-                <label htmlFor="ename">Name</label>
-                <input
-                  id="ename"
-                  placeholder="e.g. 5-Gallon Water Refill"
-                  value={editName}
-                  onChange={(e) => setEditName(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="eprice">Price (₱)</label>
-                <input
-                  id="eprice"
-                  type="number"
-                  min={0}
-                  step="0.01"
-                  placeholder="e.g. 25.00"
-                  value={editPrice}
-                  onChange={(e) => setEditPrice(e.target.value)}
-                  required
-                />
-              </div>
-              <div className="field">
-                <label htmlFor="ecat">Category</label>
-                <select
-                  id="ecat"
-                  value={editCategory}
-                  onChange={(e) => {
-                    const next = e.target.value as 'water' | 'other';
-                    setEditCategory(next);
-                    if (next === 'water') setEditStockQty('');
-                  }}
-                >
-                  <option value="water">Water Refill</option>
-                  <option value="other">Others</option>
-                </select>
-              </div>
-              {tracksStock(editCategory) ? (
+      {addOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            if (!saving) setAddOpen(false);
+          }}
+        >
+          <div
+            className="modal-card inventory-product-modal"
+            role="dialog"
+            aria-labelledby="add-product-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="inventory-modal-head">
+              <h2 id="add-product-title">Add product</h2>
+              <button type="button" className="inventory-modal-close" aria-label="Close" disabled={saving} onClick={() => setAddOpen(false)}>
+                ×
+              </button>
+            </div>
+            <form className="inventory-product-form" onSubmit={(e) => void addProduct(e)}>
+              <div className="inventory-modal-body">
+                <div className="inventory-modal-grid">
+                  <div className="field">
+                    <label htmlFor="pcat">Category</label>
+                    <select
+                      id="pcat"
+                      value={category}
+                      onChange={(e) => {
+                        const next = e.target.value as 'water' | 'other';
+                        setCategory(next);
+                        if (next === 'water') setStockQty('');
+                      }}
+                    >
+                      <option value="water">Water Refill</option>
+                      <option value="other">Others</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="pprice">Price (₱)</label>
+                    <input
+                      id="pprice"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="25.00"
+                      value={price}
+                      onChange={(e) => setPrice(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
                 <div className="field">
-                  <label htmlFor="estock">Stock quantity (pcs)</label>
+                  <label htmlFor="pname">Product name</label>
                   <input
-                    id="estock"
-                    type="number"
-                    min={0}
-                    step={1}
-                    placeholder="e.g. 50"
-                    value={editStockQty}
-                    onChange={(e) => setEditStockQty(e.target.value)}
+                    id="pname"
+                    placeholder="e.g. 5 Gallon Slim"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
                     required
                   />
                 </div>
-              ) : null}
-              <label className={`checkbox-row inventory-loyalty-row${!loyaltyProgramActive ? ' disabled' : ''}`}>
-                <input
-                  type="checkbox"
-                  checked={loyaltyProgramActive && editEarnLoyalty}
-                  disabled={!loyaltyProgramActive}
-                  onChange={(e) => setEditEarnLoyalty(e.target.checked)}
+                {tracksStock(category) ? (
+                  <div className="field">
+                    <label htmlFor="pstock">Stock quantity (pcs)</label>
+                    <input
+                      id="pstock"
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="e.g. 50"
+                      value={stockQty}
+                      onChange={(e) => setStockQty(e.target.value)}
+                      required
+                    />
+                    <p className="field-hint">Low stock alert at {LOW_STOCK_THRESHOLD} pcs.</p>
+                  </div>
+                ) : null}
+                <ImageUploadField
+                  key={addOpen ? 'add-image' : 'add-image-closed'}
+                  label="Product image"
+                  disabled={saving}
+                  onFileSelect={setNewImageFile}
                 />
-                Available for Loyalty Points
-              </label>
-              {!loyaltyProgramActive ? (
-                <p className="muted-block inventory-loyalty-hint">Enable Loyalty points in the sidebar first.</p>
-              ) : null}
-              <ImageUploadField
-                label="Product image"
-                hint="Replace current photo"
-                disabled={editSaving}
-                previewUrl={editImageFile ? undefined : publicWrsAssetUrl(supabase, editing.image_url) ?? undefined}
-                onFileSelect={setEditImageFile}
-              />
-              <div className="row-actions" style={{ marginTop: 8 }}>
-                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setEditing(null)}>
+                <label className={`checkbox-row inventory-loyalty-row${!loyaltyProgramActive ? ' disabled' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={loyaltyProgramActive && earnLoyalty}
+                    disabled={!loyaltyProgramActive || loyaltyLoading}
+                    onChange={(e) => setEarnLoyalty(e.target.checked)}
+                  />
+                  Earn loyalty points
+                </label>
+                {!loyaltyProgramActive && !loyaltyLoading ? (
+                  <p className="muted-block inventory-loyalty-hint">
+                    Turn on the program in <Link to="/loyalty">Loyalty points</Link> to mark products.
+                  </p>
+                ) : null}
+              </div>
+              <div className="inventory-modal-foot">
+                <button type="button" className="btn btn-ghost btn-sm" disabled={saving} onClick={() => setAddOpen(false)}>
+                  Cancel
+                </button>
+                <button type="submit" className="btn btn-primary btn-sm" disabled={saving}>
+                  {saving ? 'Saving…' : 'Save product'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      ) : null}
+
+      {editing ? (
+        <div className="modal-backdrop" role="presentation" onClick={() => setEditing(null)}>
+          <div className="modal-card inventory-product-modal" role="dialog" aria-labelledby="edit-product-title" onClick={(e) => e.stopPropagation()}>
+            <div className="inventory-modal-head">
+              <h2 id="edit-product-title">Edit product</h2>
+              <button type="button" className="inventory-modal-close" aria-label="Close" disabled={editSaving} onClick={() => setEditing(null)}>
+                ×
+              </button>
+            </div>
+            <form className="inventory-product-form" onSubmit={(e) => void saveEdit(e)}>
+              <div className="inventory-modal-body">
+                <div className="inventory-modal-grid">
+                  <div className="field">
+                    <label htmlFor="ecat">Category</label>
+                    <select
+                      id="ecat"
+                      value={editCategory}
+                      onChange={(e) => {
+                        const next = e.target.value as 'water' | 'other';
+                        setEditCategory(next);
+                        if (next === 'water') setEditStockQty('');
+                      }}
+                    >
+                      <option value="water">Water Refill</option>
+                      <option value="other">Others</option>
+                    </select>
+                  </div>
+                  <div className="field">
+                    <label htmlFor="eprice">Price (₱)</label>
+                    <input
+                      id="eprice"
+                      type="number"
+                      min={0}
+                      step="0.01"
+                      placeholder="25.00"
+                      value={editPrice}
+                      onChange={(e) => setEditPrice(e.target.value)}
+                      required
+                    />
+                  </div>
+                </div>
+                <div className="field">
+                  <label htmlFor="ename">Product name</label>
+                  <input
+                    id="ename"
+                    placeholder="e.g. 5 Gallon Slim"
+                    value={editName}
+                    onChange={(e) => setEditName(e.target.value)}
+                    required
+                  />
+                </div>
+                {tracksStock(editCategory) ? (
+                  <div className="field">
+                    <label htmlFor="estock">Stock quantity (pcs)</label>
+                    <input
+                      id="estock"
+                      type="number"
+                      min={0}
+                      step={1}
+                      placeholder="e.g. 50"
+                      value={editStockQty}
+                      onChange={(e) => setEditStockQty(e.target.value)}
+                      required
+                    />
+                  </div>
+                ) : null}
+                <ImageUploadField
+                  label="Product image"
+                  disabled={editSaving}
+                  previewUrl={editImageFile ? undefined : publicWrsAssetUrl(supabase, editing.image_url) ?? undefined}
+                  onFileSelect={setEditImageFile}
+                />
+                <label className={`checkbox-row inventory-loyalty-row${!loyaltyProgramActive ? ' disabled' : ''}`}>
+                  <input
+                    type="checkbox"
+                    checked={loyaltyProgramActive && editEarnLoyalty}
+                    disabled={!loyaltyProgramActive}
+                    onChange={(e) => setEditEarnLoyalty(e.target.checked)}
+                  />
+                  Earn loyalty points
+                </label>
+                {!loyaltyProgramActive ? (
+                  <p className="muted-block inventory-loyalty-hint">Enable Loyalty points in the sidebar first.</p>
+                ) : null}
+              </div>
+              <div className="inventory-modal-foot">
+                <button type="button" className="btn btn-ghost btn-sm" disabled={editSaving} onClick={() => setEditing(null)}>
                   Cancel
                 </button>
                 <button type="submit" className="btn btn-primary btn-sm" disabled={editSaving}>
@@ -550,7 +603,7 @@ function InventorySection({
   children,
 }: {
   title: string;
-  icon: string;
+  icon: ReactNode;
   count: number;
   children: ReactNode;
 }) {
@@ -671,15 +724,6 @@ function PlusIcon() {
   return (
     <svg width="18" height="18" viewBox="0 0 24 24" fill="none" aria-hidden>
       <path d="M12 5v14M5 12h14" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-function SaveIcon() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path d="M5 20h14a1 1 0 001-1V8l-4-4H5a1 1 0 00-1 1v14a1 1 0 001 1z" stroke="currentColor" strokeWidth="1.8" />
-      <path d="M9 4v4h6V4M8 14h8M8 17h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
     </svg>
   );
 }

@@ -2,7 +2,7 @@ import { useEffect } from 'react';
 import { Pressable, View } from 'react-native';
 import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 import { theme } from '../theme';
@@ -41,15 +41,12 @@ function TabButton({
   const focus = useSharedValue(isFocused ? 1 : 0);
 
   useEffect(() => {
-    focus.value = withTiming(isFocused ? 1 : 0, { duration: 180 });
+    focus.value = withSpring(isFocused ? 1 : 0, { damping: 14, stiffness: 220, mass: 0.6 });
   }, [isFocused, focus]);
 
-  const iconAnim = useAnimatedStyle(() => {
-    const s = 1 + 0.06 * focus.value;
-    return {
-      transform: [{ scale: s }],
-    };
-  });
+  const iconAnim = useAnimatedStyle(() => ({
+    transform: [{ scale: 1 + focus.value * 0.14 }, { translateY: focus.value * -3 }],
+  }));
 
   const resolvedIcon = isFocused ? iconActiveName : iconName;
 
@@ -83,6 +80,24 @@ function TabButton({
 
 export function AnimatedTabBar({ state, descriptors, navigation }: BottomTabBarProps) {
   const insets = useSafeAreaInsets();
+  const trackWidth = useSharedValue(0);
+  const active = useSharedValue(state.index);
+  const tabCount = useSharedValue(state.routes.length);
+
+  useEffect(() => {
+    tabCount.value = state.routes.length;
+    active.value = withSpring(state.index, { damping: 16, stiffness: 210, mass: 0.65 });
+  }, [active, state.index, state.routes.length, tabCount]);
+
+  const indicatorStyle = useAnimatedStyle(() => {
+    const count = Math.max(tabCount.value, 1);
+    const tabW = trackWidth.value / count;
+    return {
+      width: Math.max(tabW - 10, 0),
+      opacity: trackWidth.value > 0 ? 1 : 0,
+      transform: [{ translateX: active.value * tabW + 5 }],
+    };
+  });
 
   return (
     <View
@@ -95,7 +110,26 @@ export function AnimatedTabBar({ state, descriptors, navigation }: BottomTabBarP
         paddingBottom: 8 + Math.max(insets.bottom, 0),
       }}
     >
-      <View style={{ flexDirection: 'row', minHeight: 52, alignItems: 'center' }}>
+      <View
+        onLayout={(e) => {
+          trackWidth.value = e.nativeEvent.layout.width;
+        }}
+        style={{ flexDirection: 'row', minHeight: 52, alignItems: 'center' }}
+      >
+        <Animated.View
+          pointerEvents="none"
+          style={[
+            {
+              position: 'absolute',
+              left: 0,
+              top: 2,
+              height: 48,
+              borderRadius: 16,
+              backgroundColor: 'rgba(0,116,240,0.12)',
+            },
+            indicatorStyle,
+          ]}
+        />
         {state.routes.map((route, index) => {
           const options = descriptors[route.key]?.options;
           const label =

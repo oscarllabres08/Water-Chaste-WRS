@@ -132,7 +132,7 @@ export function AnalyticsPage() {
                 <span>{s.status}</span>
                 <span>{s.count}</span>
               </div>
-              <div style={{ height: 10, background: '#e8eef9', borderRadius: 999, marginTop: 4, overflow: 'hidden' }}>
+              <div style={{ height: 10, background: '#e4eef8', borderRadius: 999, marginTop: 4, overflow: 'hidden' }}>
                 <div
                   style={{
                     width: `${(s.count / maxStatus) * 100}%`,

@@ -373,7 +373,7 @@ function BorrowedCustomerCard({
                 borderRadius: 12,
                 borderWidth: 1,
                 borderColor: isOn ? theme.colors.primary : 'rgba(245,158,11,0.45)',
-                backgroundColor: isOn ? 'rgba(18,101,214,0.12)' : 'rgba(245,158,11,0.10)',
+                backgroundColor: isOn ? 'rgba(0,114,240,0.12)' : 'rgba(245,158,11,0.10)',
                 flexDirection: 'row',
                 alignItems: 'center',
                 gap: 6,

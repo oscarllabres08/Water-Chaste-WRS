@@ -35,7 +35,7 @@ function mergeCustomerOptions(
 }
 
 export async function loadPosCustomerNames(businessId: string): Promise<PosCustomerOption[]> {
-  const [{ data: posRows }, { data: profiles }] = await Promise.all([
+  const [{ data: posRows }, { data: profiles }, { data: savedNames }] = await Promise.all([
     supabase
       .from('pos_sales')
       .select('customer_name')
@@ -49,9 +49,13 @@ export async function loadPosCustomerNames(businessId: string): Promise<PosCusto
       .eq('role', 'customer')
       .not('display_name', 'is', null)
       .limit(400),
+    supabase.from('seller_pos_customers').select('display_name').eq('seller_id', businessId),
   ]);
 
-  const posNames = (posRows ?? []).map((r) => String(r.customer_name ?? ''));
+  const posNames = [
+    ...(posRows ?? []).map((r) => String(r.customer_name ?? '')),
+    ...(savedNames ?? []).map((r) => String(r.display_name ?? '')),
+  ];
   const profileRows = (profiles ?? []).map((p) => ({
     userId: String(p.user_id),
     name: String(p.display_name ?? ''),
@@ -73,8 +77,9 @@ export function filterCustomerNameSuggestions(
     const trimmed = option.name.trim();
     if (!trimmed) continue;
     const n = normalizeCustomerName(trimmed);
-    if (n === q) continue;
-    if (n.startsWith(q)) {
+    if (n === q) {
+      scored.push({ option, score: -1 });
+    } else if (n.startsWith(q)) {
       scored.push({ option, score: 0 });
     } else if (n.split(/\s+/).some((word) => word.startsWith(q))) {
       scored.push({ option, score: 1 });
@@ -89,4 +94,47 @@ export function filterCustomerNameSuggestions(
       a.option.name.localeCompare(b.option.name, undefined, { sensitivity: 'base' })
   );
   return scored.slice(0, limit).map((s) => s.option);
+}
+
+export function customerNameKey(name: string): string {
+  return normalizeCustomerName(name).replace(/\s+/g, ' ');
+}
+
+/** Save a walk-in name so it shows on Customer List before any sale. */
+export async function savePosWalkInCustomer(
+  businessId: string,
+  rawName: string
+): Promise<{ ok: boolean; message?: string }> {
+  const displayName = rawName.trim().replace(/\s+/g, ' ');
+  const key = customerNameKey(displayName);
+  if (key.length < 2) return { ok: true };
+
+  const { error } = await supabase.from('seller_pos_customers').upsert(
+    {
+      seller_id: businessId,
+      customer_name_key: key,
+      display_name: displayName,
+    },
+    { onConflict: 'seller_id,customer_name_key', ignoreDuplicates: true }
+  );
+  if (error) {
+    const missing =
+      error.code === '42P01' ||
+      error.code === 'PGRST205' ||
+      error.message.includes('seller_pos_customers');
+    return {
+      ok: false,
+      message: missing
+        ? 'Run the seller_pos_customers table from supabase/water-chaste.sql in Supabase, then try again.'
+        : error.message,
+    };
+  }
+
+  await supabase
+    .from('seller_hidden_pos_customers')
+    .delete()
+    .eq('seller_id', businessId)
+    .eq('customer_name_key', key);
+
+  return { ok: true };
 }

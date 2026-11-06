@@ -6,6 +6,18 @@ import { getSupabaseUrlAndKey } from './supabaseEnv';
 
 const { url: supabaseUrl, anonKey: supabaseAnonKey } = getSupabaseUrlAndKey();
 
+/** Drop a saved login from the retired Zoda project so it cannot refresh against that host. */
+function dropRetiredWebSession() {
+  if (Platform.OS !== 'web' || typeof globalThis.localStorage === 'undefined') return;
+  const storage = globalThis.localStorage;
+  for (let i = storage.length - 1; i >= 0; i -= 1) {
+    const key = storage.key(i);
+    if (key && key.includes('nigvimeeqglqvgvtnbfy')) storage.removeItem(key);
+  }
+}
+
+dropRetiredWebSession();
+
 /**
  * AsyncStorage touches `window` and breaks Expo Router **web** SSR in Node.
  * Use localStorage in the browser; during SSR return null (no persisted session on server).

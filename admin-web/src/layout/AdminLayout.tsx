@@ -1,674 +1,476 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-
 import { NavLink, Outlet, useLocation, useNavigate } from 'react-router-dom';
-
-
 
 import { useAuth } from '../auth/AuthProvider';
 import { AdminNotificationsButton } from '../components/AdminNotificationsButton';
 import { PendingOrderReminderBanner } from '../components/PendingOrderReminderBanner';
 import { usePendingOrderReminder } from '../hooks/usePendingOrderReminder';
-import { useBusinessMode, type BusinessMode } from '../business/BusinessModeProvider';
 import { supabase } from '../lib/supabase';
-
-
+import { useTheme } from '../theme/ThemeProvider';
 
 type NavIconId =
-
   | 'dashboard'
-
   | 'pos'
-
   | 'inventory'
-
-  | 'loyalty'
-
+  | 'containers'
   | 'sales'
-
-  | 'staff'
-
+  | 'loyalty'
   | 'customers'
-
   | 'expenses'
-
-  | 'ewallet'
-
+  | 'staff'
   | 'settings'
-
   | 'signout';
 
-
+const STORE_OPEN_KEY = 'water-chaste-store-open';
 
 function NavIcon({ id }: { id: NavIconId }) {
-
-  const common = { width: 20, height: 20, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true as const };
-
+  const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true as const };
   switch (id) {
-
     case 'dashboard':
-
       return (
-
         <svg {...common}>
-
-          <path
-
-            d="M4 13h6V4H4v9zm0 7h6v-5H4v5zm10 0h6V11h-6v9zm0-16v5h6V4h-6z"
-
-            stroke="currentColor"
-
-            strokeWidth="1.8"
-
-            strokeLinejoin="round"
-
-          />
-
+          <rect x="3" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.8" />
+          <rect x="13" y="3" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.8" />
+          <rect x="3" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.8" />
+          <rect x="13" y="13" width="8" height="8" rx="2" stroke="currentColor" strokeWidth="1.8" />
         </svg>
-
       );
-
     case 'pos':
-
       return (
-
         <svg {...common}>
-
-          <rect x="3" y="6" width="18" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
-
-          <path d="M7 10h10M7 14h6" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-
+          <circle cx="9" cy="20" r="1.2" fill="currentColor" />
+          <circle cx="18" cy="20" r="1.2" fill="currentColor" />
+          <path d="M3 4h2l2.2 11h11.3l2-7H7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-
       );
-
     case 'inventory':
-
       return (
-
         <svg {...common}>
-
-          <path
-
-            d="M12 3L4 7v10l8 4 8-4V7l-8-4z"
-
-            stroke="currentColor"
-
-            strokeWidth="1.8"
-
-            strokeLinejoin="round"
-
-          />
-
-          <path d="M4 7l8 4 8-4M12 11v10" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-
+          <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+          <path d="M12 12l8-4.5M12 12v9M12 12L4 7.5" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
         </svg>
-
       );
-
-    case 'loyalty':
-
+    case 'containers':
       return (
-
         <svg {...common}>
-
-          <path
-
-            d="M12 3l2.4 4.9 5.4.8-3.9 3.8.9 5.4L12 15.8 7.2 18l.9-5.4-3.9-3.8 5.4-.8L12 3z"
-
-            stroke="currentColor"
-
-            strokeWidth="1.8"
-
-            strokeLinejoin="round"
-
-          />
-
+          <circle cx="8" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+          <circle cx="16" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
+          <circle cx="12" cy="15" r="3" stroke="currentColor" strokeWidth="1.8" />
         </svg>
-
       );
-
     case 'sales':
-
       return (
-
         <svg {...common}>
-
           <path d="M4 19V5M4 19h16" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-
-          <path
-
-            d="M7 15l3-4 3 2 5-7"
-
-            stroke="currentColor"
-
-            strokeWidth="1.8"
-
-            strokeLinecap="round"
-
-            strokeLinejoin="round"
-
-          />
-
+          <path d="M7 15l3.2-4 3 2.2L18 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-
       );
-
-    case 'staff':
-
+    case 'loyalty':
       return (
-
         <svg {...common}>
-
-          <circle cx="9" cy="8" r="3" stroke="currentColor" strokeWidth="1.8" />
-
-          <path d="M3 19c0-3.3 2.7-5 6-5s6 1.7 6 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-
-          <circle cx="17" cy="9" r="2.2" stroke="currentColor" strokeWidth="1.6" />
-
-          <path d="M14.5 19c.3-2.2 1.8-3.5 4-3.5" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
-
+          <path d="M12 3l1.6 4.6H18l-3.6 2.8 1.4 4.6L12 12.8 8.2 15l1.4-4.6L6 7.6h4.4L12 3z" stroke="currentColor" strokeWidth="1.6" strokeLinejoin="round" />
         </svg>
-
       );
-
     case 'customers':
-
       return (
-
         <svg {...common}>
-
-          <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
-
-          <path d="M5 20c0-3.9 3.1-7 7-7s7 3.1 7 7" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-
+          <circle cx="12" cy="8" r="3.2" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M5 19c.8-3.2 3.4-5 7-5s6.2 1.8 7 5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
-
       );
-
     case 'expenses':
-
       return (
-
         <svg {...common}>
-
-          <path d="M6 4h12v16H6V4z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-
-          <path d="M9 8h6M9 12h6M9 16h4" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-
+          <rect x="5" y="3" width="14" height="18" rx="2" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M8 8h8M8 12h8M8 16h5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
         </svg>
-
       );
-
-    case 'ewallet':
-
+    case 'staff':
       return (
-
         <svg {...common}>
-
-          <rect x="3" y="6" width="18" height="13" rx="2.5" stroke="currentColor" strokeWidth="1.8" />
-
-          <path d="M3 10h18M16 14h2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-
+          <circle cx="9" cy="8" r="2.6" stroke="currentColor" strokeWidth="1.8" />
+          <path d="M3.8 18.5c.4-2.8 2.4-4.3 5.2-4.3s4.8 1.5 5.2 4.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+          <circle cx="16.5" cy="9" r="2" stroke="currentColor" strokeWidth="1.6" />
+          <path d="M15 18.5c.3-1.8 1.4-3 3.2-3.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
         </svg>
-
       );
-
     case 'settings':
-
       return (
-
         <svg {...common}>
-
           <circle cx="12" cy="12" r="3" stroke="currentColor" strokeWidth="1.8" />
-
           <path
-
-            d="M12 2v2M12 20v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M2 12h2M20 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"
-
+            d="M12 3.5v2M12 18.5v2M4.8 6.2l1.4 1.4M17.8 16.4l1.4 1.4M3.5 12h2M18.5 12h2M4.8 17.8l1.4-1.4M17.8 7.6l1.4-1.4"
             stroke="currentColor"
-
             strokeWidth="1.8"
-
             strokeLinecap="round"
-
           />
-
         </svg>
-
       );
-
     case 'signout':
-
       return (
-
         <svg {...common}>
-
           <path d="M10 7V5a2 2 0 012-2h7v18h-7a2 2 0 01-2-2v-2" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
-
-          <path d="M14 12H3m0 0l3-3m-3 3l3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-
+          <path d="M15 12H4m0 0l3-3m-3 3l3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-
       );
-
     default:
-
       return null;
-
   }
-
 }
-
-
 
 function MenuIcon({ open }: { open: boolean }) {
-
   return (
-
     <svg width="22" height="22" viewBox="0 0 24 24" fill="none" aria-hidden>
-
       {open ? (
-
         <path d="M6 6l12 12M18 6L6 18" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-
       ) : (
-
         <path d="M4 7h16M4 12h16M4 17h16" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" />
-
       )}
-
     </svg>
-
   );
-
 }
 
-
-
-const NAV_WRS = [
-
-  { to: '/', label: 'Dashboard', end: true, icon: 'dashboard' as const },
-
-  { to: '/pos', label: 'POS', icon: 'pos' as const },
-
+const NAV = [
+  { to: '/', label: 'Overview', end: true, icon: 'dashboard' as const },
+  { to: '/pos', label: 'POS', icon: 'pos' as const, kbd: '⌘P' },
   { to: '/inventory', label: 'Inventory', icon: 'inventory' as const },
-
-  { to: '/loyalty', label: 'Loyalty points', icon: 'loyalty' as const },
-
+  { to: '/containers', label: 'Containers', icon: 'containers' as const },
   { to: '/sales', label: 'Sales & Analytics', icon: 'sales' as const },
-
+  { to: '/loyalty', label: 'Loyalty Points', icon: 'loyalty' as const },
+  { to: '/customers', label: 'Customer List', icon: 'customers' as const },
   { to: '/expenses', label: 'Expenses', icon: 'expenses' as const },
-
-  { to: '/ewallet', label: 'E-wallet', icon: 'ewallet' as const },
-
-  { to: '/staff', label: 'Staff management', icon: 'staff' as const },
-
-  { to: '/customers', label: 'Customer list', icon: 'customers' as const },
-
-  { to: '/settings', label: 'Settings', icon: 'settings' as const },
-
+  { to: '/staff', label: 'Staff approval', icon: 'staff' as const, ownerOnly: true },
 ] as const;
 
-const NAV_LAUNDRY = [
+const PAGE_TITLES: { match: (path: string) => boolean; label: string }[] = [
+  { match: (p) => p === '/', label: 'Overview' },
+  { match: (p) => p.startsWith('/pos'), label: 'POS' },
+  { match: (p) => p.startsWith('/inventory'), label: 'Inventory' },
+  { match: (p) => p.startsWith('/containers'), label: 'Containers' },
+  { match: (p) => p.startsWith('/sales'), label: 'Sales & Analytics' },
+  { match: (p) => p.startsWith('/loyalty'), label: 'Loyalty Points' },
+  { match: (p) => p.startsWith('/customers'), label: 'Customer List' },
+  { match: (p) => p.startsWith('/expenses'), label: 'Expenses' },
+  { match: (p) => p.startsWith('/staff'), label: 'Staff approval' },
+  { match: (p) => p.startsWith('/ewallet'), label: 'E-wallet' },
+  { match: (p) => p.startsWith('/settings'), label: 'Settings' },
+];
 
-  { to: '/laundry/dashboard', label: 'Dashboard', end: true, icon: 'dashboard' as const },
+function initials(name: string) {
+  const parts = name.trim().split(/\s+/).filter(Boolean);
+  if (parts.length >= 2) return `${parts[0][0]}${parts[parts.length - 1][0]}`.toUpperCase();
+  return (parts[0]?.[0] ?? 'W').toUpperCase();
+}
 
-  { to: '/laundry/pos', label: 'POS', icon: 'pos' as const },
-
-  { to: '/laundry/services', label: 'Services', icon: 'inventory' as const },
-
-  { to: '/laundry/sales', label: 'Sales & Analytics', icon: 'sales' as const },
-
-  { to: '/laundry/expenses', label: 'Expenses', icon: 'expenses' as const },
-
-  { to: '/settings', label: 'Settings', icon: 'settings' as const },
-
-] as const;
-
-
+function readStoreOpen() {
+  try {
+    return localStorage.getItem(STORE_OPEN_KEY) !== 'closed';
+  } catch {
+    return true;
+  }
+}
 
 export function AdminLayout() {
-
-  const { user, profile, businessId, signOut } = useAuth();
-
-  const { setMode, isLaundry } = useBusinessMode();
-
+  const { user, profile, businessId, signOut, isStoreOwner } = useAuth();
+  const { darkMode, setDarkMode } = useTheme();
   const navigate = useNavigate();
-
   const location = useLocation();
-
-  const NAV = isLaundry ? NAV_LAUNDRY : NAV_WRS;
-
   const [pendingOrders, setPendingOrders] = useState(0);
-
+  const [pendingStaff, setPendingStaff] = useState(0);
   const [navOpen, setNavOpen] = useState(false);
-
-  const { visibleOrders, dismissBanner } = usePendingOrderReminder(isLaundry ? null : businessId);
+  const [settingsOpen, setSettingsOpen] = useState(location.pathname.startsWith('/settings'));
+  const [storeOpen, setStoreOpen] = useState(readStoreOpen);
+  const [storeMenuOpen, setStoreMenuOpen] = useState(false);
+  const { visibleOrders, dismissBanner } = usePendingOrderReminder(businessId);
 
   const wideMain =
     location.pathname === '/pos' ||
     location.pathname === '/inventory' ||
     location.pathname === '/sales' ||
-    location.pathname.startsWith('/laundry/');
+    location.pathname === '/containers';
 
-
+  const settingsSection = new URLSearchParams(location.search).get('section');
+  const pageLabel = PAGE_TITLES.find((item) => item.match(location.pathname))?.label ?? 'Workspace';
 
   useEffect(() => {
-
     setNavOpen(false);
-
+    if (location.pathname.startsWith('/settings')) setSettingsOpen(true);
   }, [location.pathname]);
 
-
-
   useEffect(() => {
-
     if (!navOpen) return;
-
     const prev = document.body.style.overflow;
-
     document.body.style.overflow = 'hidden';
-
     return () => {
-
       document.body.style.overflow = prev;
-
     };
-
   }, [navOpen]);
 
-
-
   const loadPending = useCallback(async () => {
-
     if (!businessId) return;
-
-    const { count, error } = await supabase
-
+    const pendingOrdersQuery = supabase
       .from('orders')
-
       .select('id', { count: 'exact', head: true })
-
       .eq('seller_id', businessId)
-
       .eq('status', 'pending');
-
-    if (!error) setPendingOrders(count ?? 0);
-
+    const pendingStaffQuery = supabase
+      .from('profiles')
+      .select('user_id', { count: 'exact', head: true })
+      .eq('seller_workspace_owner_id', businessId)
+      .eq('seller_team_role', 'staff')
+      .eq('seller_join_status', 'pending');
+    const [ordersRes, staffRes] = await Promise.all([pendingOrdersQuery, pendingStaffQuery]);
+    if (!ordersRes.error) setPendingOrders(ordersRes.count ?? 0);
+    if (!staffRes.error) setPendingStaff(staffRes.count ?? 0);
   }, [businessId]);
 
-
-
   useEffect(() => {
-
     void loadPending();
-
     if (!businessId) return;
-
     const ch = supabase
-
-      .channel(`admin-orders-${businessId}`)
-
+      .channel(`admin-pending-${businessId}`)
       .on(
-
         'postgres_changes',
-
         { event: '*', schema: 'public', table: 'orders', filter: `seller_id=eq.${businessId}` },
-
         () => void loadPending()
-
       )
-
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'profiles', filter: `seller_workspace_owner_id=eq.${businessId}` },
+        () => void loadPending()
+      )
       .subscribe();
-
     return () => {
-
       supabase.removeChannel(ch);
-
     };
-
   }, [businessId, loadPending]);
 
-
-
   async function handleSignOut() {
-
     await signOut();
-
     navigate('/auth', { replace: true });
-
   }
 
-
+  function setStoreStatus(open: boolean) {
+    setStoreOpen(open);
+    setStoreMenuOpen(false);
+    try {
+      localStorage.setItem(STORE_OPEN_KEY, open ? 'open' : 'closed');
+    } catch {
+      /* ignore */
+    }
+  }
 
   const displayName = profile?.display_name?.trim() || user?.email || 'Store owner';
-
-  const userInitial = useMemo(() => (displayName.trim()[0] ?? 'Z').toUpperCase(), [displayName]);
-
-
-
-  const activeNavLabel = NAV.find((item) =>
-
-    item.to === '/' ? location.pathname === '/' : location.pathname.startsWith(item.to)
-
-  )?.label;
-
-  function switchBusiness(next: BusinessMode) {
-
-    setMode(next);
-
-    navigate(next === 'laundry' ? '/laundry/dashboard' : '/');
-
-  }
-
-
+  const userInitial = useMemo(() => initials(displayName), [displayName]);
+  const todayLabel = new Date().toLocaleDateString('en-US', {
+    weekday: 'long',
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  });
 
   return (
-
     <div className={`admin-shell${navOpen ? ' admin-shell--nav-open' : ''}`}>
-
       <header className="admin-mobile-bar">
-
         <button
-
           type="button"
-
           className="admin-menu-btn"
-
           aria-expanded={navOpen}
-
           aria-controls="admin-sidebar"
-
           aria-label={navOpen ? 'Close menu' : 'Open menu'}
-
           onClick={() => setNavOpen((v) => !v)}
-
         >
-
           <MenuIcon open={navOpen} />
-
         </button>
-
         <div className="admin-mobile-bar-brand">
-
           <img src="/logo.png" alt="" className="admin-mobile-bar-logo" />
-
           <div className="admin-mobile-bar-text">
-
-            <span className="admin-mobile-bar-title">{isLaundry ? 'Zoda Laundry' : 'Zoda WRS'}</span>
-
-            <span className="admin-mobile-bar-page">{activeNavLabel ?? 'Admin'}</span>
-
+            <span className="admin-mobile-bar-title">Water Chaste</span>
+            <span className="admin-mobile-bar-page">{pageLabel}</span>
           </div>
-
         </div>
-
         <div className="admin-mobile-bar-actions">
-
           {pendingOrders > 0 ? <span className="admin-mobile-bar-badge">{pendingOrders}</span> : null}
-
           <AdminNotificationsButton placement="header" />
-
         </div>
-
       </header>
 
-
-
       <button
-
         type="button"
-
         className="admin-nav-backdrop"
-
         aria-hidden={!navOpen}
-
         tabIndex={navOpen ? 0 : -1}
-
         onClick={() => setNavOpen(false)}
-
       />
 
-
-
       <aside id="admin-sidebar" className="admin-sidebar">
-
-        <div className="admin-sidebar-glow" aria-hidden />
-
         <div className="admin-sidebar-inner">
-
-        <div className="admin-brand">
-
-          <div className="admin-brand-logo-wrap">
-
-            <img src="/logo.png" alt="Zoda WRS" className="admin-brand-logo" />
-
+          <div className="admin-brand">
+            <img src="/logo.png" alt="Water Chaste" className="admin-brand-logo" />
+            <div>
+              <div className="admin-brand-title">Water Chaste</div>
+              <div className="admin-brand-sub">Water station</div>
+            </div>
           </div>
 
-          <div>
-
-            <div className="admin-brand-title">{isLaundry ? 'Zoda Laundry' : 'Zoda WRS'}</div>
-
-            <div className="admin-brand-sub">{isLaundry ? 'Laundry admin' : 'Admin · Seller · Customer'}</div>
-
+          <div className="store-status">
+            <button
+              type="button"
+              className="store-status-btn"
+              aria-expanded={storeMenuOpen}
+              onClick={() => setStoreMenuOpen((v) => !v)}
+            >
+              <span className={`store-status-dot${storeOpen ? ' is-open' : ''}`} aria-hidden />
+              <span>{storeOpen ? 'Store is open' : 'Store is closed'}</span>
+              <span className="store-status-caret" aria-hidden>
+                ▾
+              </span>
+            </button>
+            {storeMenuOpen ? (
+              <div className="store-status-menu" role="menu">
+                <button type="button" role="menuitem" onClick={() => setStoreStatus(true)}>
+                  Store is open
+                </button>
+                <button type="button" role="menuitem" onClick={() => setStoreStatus(false)}>
+                  Store is closed
+                </button>
+              </div>
+            ) : null}
           </div>
 
-        </div>
-
-
-
-        <div className="business-mode-switch">
-          {isLaundry ? (
-            <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={() => switchBusiness('wrs')}>
-              Switch to Water Refilling Station
-            </button>
-          ) : (
-            <button type="button" className="btn btn-ghost btn-sm btn-block" onClick={() => switchBusiness('laundry')}>
-              Switch to Laundry
-            </button>
-          )}
-        </div>
-
-        <div className="admin-sidebar-body">
-
-          <p className="admin-nav-section-label">Main menu</p>
-
-          <nav className="admin-nav" aria-label="Main">
-
-            {NAV.map((item) => (
-
-              <NavLink
-
-                key={item.to}
-
-                to={item.to}
-
-                end={'end' in item ? item.end : false}
-
-                className={({ isActive }) => (isActive ? 'admin-nav-link active' : 'admin-nav-link')}
-
-                onClick={() => setNavOpen(false)}
-
-              >
-
-                <span className="admin-nav-link-inner">
-
-                  <span className="admin-nav-icon-wrap">
-
-                    <NavIcon id={item.icon} />
-
+          <div className="admin-sidebar-body">
+            <p className="admin-nav-section-label">Workspace</p>
+            <nav className="admin-nav" aria-label="Workspace">
+              {NAV.filter((item) => !('ownerOnly' in item) || isStoreOwner).map((item) => (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  end={'end' in item ? item.end : false}
+                  className={({ isActive }) => (isActive ? 'admin-nav-link active' : 'admin-nav-link')}
+                  onClick={() => setNavOpen(false)}
+                >
+                  <span className="admin-nav-link-inner">
+                    <span className="admin-nav-icon-wrap">
+                      <NavIcon id={item.icon} />
+                    </span>
+                    <span className="admin-nav-label">{item.label}</span>
                   </span>
+                  {'kbd' in item ? <span className="admin-nav-kbd">{item.kbd}</span> : null}
+                  {item.to === '/' && pendingOrders > 0 ? <span className="admin-badge">{pendingOrders}</span> : null}
+                  {item.to === '/staff' && pendingStaff > 0 ? <span className="admin-badge">{pendingStaff}</span> : null}
+                </NavLink>
+              ))}
 
-                  <span className="admin-nav-label">{item.label}</span>
-
+              <button
+                type="button"
+                className={`admin-nav-link admin-nav-link--button${location.pathname.startsWith('/settings') ? ' active' : ''}`}
+                aria-expanded={settingsOpen}
+                onClick={() => {
+                  if (location.pathname.startsWith('/settings')) {
+                    setSettingsOpen((v) => !v);
+                    return;
+                  }
+                  setSettingsOpen(true);
+                  navigate('/settings?section=general');
+                }}
+              >
+                <span className="admin-nav-link-inner">
+                  <span className="admin-nav-icon-wrap">
+                    <NavIcon id="settings" />
+                  </span>
+                  <span className="admin-nav-label">Settings</span>
                 </span>
+                <span className="store-status-caret" aria-hidden>
+                  {settingsOpen ? '▴' : '▾'}
+                </span>
+              </button>
 
-                {item.to === '/' && pendingOrders > 0 ? <span className="admin-badge">{pendingOrders}</span> : null}
-
-              </NavLink>
-
-            ))}
-
-          </nav>
+              {settingsOpen ? (
+                <div className="admin-subnav">
+                  <NavLink
+                    to="/settings?section=general"
+                    className={() =>
+                      location.pathname.startsWith('/settings') && (settingsSection ?? 'general') === 'general'
+                        ? 'admin-subnav-link active'
+                        : 'admin-subnav-link'
+                    }
+                    onClick={() => setNavOpen(false)}
+                  >
+                    General Settings
+                  </NavLink>
+                  <NavLink
+                    to="/settings?section=account"
+                    className={() =>
+                      settingsSection === 'account' ? 'admin-subnav-link active' : 'admin-subnav-link'
+                    }
+                    onClick={() => setNavOpen(false)}
+                  >
+                    Account Settings
+                  </NavLink>
+                  <NavLink
+                    to="/settings?section=notifications"
+                    className={() =>
+                      settingsSection === 'notifications' ? 'admin-subnav-link active' : 'admin-subnav-link'
+                    }
+                    onClick={() => setNavOpen(false)}
+                  >
+                    Notification
+                  </NavLink>
+                  <label className="admin-subnav-toggle">
+                    <span>Dark mode {darkMode ? 'On' : 'Off'}</span>
+                    <input
+                      type="checkbox"
+                      checked={darkMode}
+                      onChange={(e) => setDarkMode(e.target.checked)}
+                      aria-label="Dark mode"
+                    />
+                  </label>
+                </div>
+              ) : null}
+            </nav>
+          </div>
 
           <div className="admin-sidebar-foot">
-
             <div className="admin-user-row">
-
               <span className="admin-user-avatar" aria-hidden>
-
                 {userInitial}
-
               </span>
-
               <div className="admin-user-meta">
-
-                <span className="admin-user-role">Store owner</span>
-
                 <span className="admin-user">{displayName}</span>
-
+                <span className="admin-user-role">{isStoreOwner ? 'Master admin' : 'Admin'}</span>
               </div>
-
+              <button type="button" className="admin-signout-icon" aria-label="Sign out" onClick={() => void handleSignOut()}>
+                <NavIcon id="signout" />
+              </button>
             </div>
-
-            <button type="button" className="btn btn-sidebar-signout btn-sm" onClick={() => void handleSignOut()}>
-
-              <NavIcon id="signout" />
-
-              Sign out
-
-            </button>
-
           </div>
-
         </div>
-
-        </div>
-
       </aside>
 
-
-
-      <main className="admin-main">
-
-        <div className={`admin-main-inner${wideMain ? ' admin-main-inner--wide' : ''}`}>
-
-          {!isLaundry ? (
+      <div className="admin-workspace">
+        <header className="admin-topbar">
+          <p className="admin-breadcrumb">
+            <span>Workspace</span>
+            <span aria-hidden>/</span>
+            <strong>{pageLabel}</strong>
+          </p>
+          <div className="admin-topbar-actions">
+            <time className="admin-topbar-date" dateTime={new Date().toISOString()}>
+              {todayLabel}
+            </time>
+            <AdminNotificationsButton placement="desktop" />
+            <span className="admin-topbar-avatar" aria-hidden>
+              {userInitial}
+            </span>
+          </div>
+        </header>
+        <main className="admin-main">
+          <div className={`admin-main-inner${wideMain ? ' admin-main-inner--wide' : ''}`}>
             <PendingOrderReminderBanner orders={visibleOrders} onDismiss={dismissBanner} />
-          ) : null}
-
-          <Outlet context={{ pendingOrders, refreshPending: loadPending }} />
-
-        </div>
-
-      </main>
-
-      <AdminNotificationsButton placement="desktop" />
-
+            <Outlet context={{ pendingOrders, refreshPending: loadPending, storeOpen }} />
+          </div>
+        </main>
+      </div>
     </div>
-
   );
-
 }
-
-

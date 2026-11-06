@@ -1,4 +1,4 @@
-"""Regenerate Expo app icons with safe padding so ZODA stays fully visible."""
+"""Build Water Chaste app icons and copy the business logo."""
 
 from __future__ import annotations
 
@@ -15,6 +15,13 @@ ADAPTIVE_SCALE = 0.58
 APP_ASSETS = [
     ROOT / "customer-app" / "assets",
     ROOT / "seller-app" / "assets",
+]
+
+LOGO_COPIES = [
+    ROOT / "customer-app" / "assets" / "logo.png",
+    ROOT / "seller-app" / "assets" / "logo.png",
+    ROOT / "admin-web" / "public" / "logo.png",
+    ROOT / "download-site" / "logo.png",
 ]
 
 
@@ -35,11 +42,22 @@ def main() -> None:
     if not SOURCE.exists():
         raise SystemExit(f"Missing source logo: {SOURCE}")
 
+    logo = Image.open(SOURCE).convert("RGBA")
+
+    for dest in LOGO_COPIES:
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        logo.save(dest, "PNG", optimize=True)
+        print(f"Copied logo to {dest}")
+
     for assets_dir in APP_ASSETS:
         assets_dir.mkdir(parents=True, exist_ok=True)
         make_padded_icon(SOURCE, assets_dir / "icon.png", ICON_SCALE)
         make_padded_icon(SOURCE, assets_dir / "adaptive-icon.png", ADAPTIVE_SCALE)
+        make_padded_icon(SOURCE, assets_dir / "favicon.png", 0.82)
         print(f"Updated icons in {assets_dir}")
+
+    make_padded_icon(SOURCE, ROOT / "seller-app" / "assets" / "images" / "icon.png", ICON_SCALE)
+    make_padded_icon(SOURCE, ROOT / "seller-app" / "assets" / "images" / "favicon.png", 0.82)
 
 
 if __name__ == "__main__":

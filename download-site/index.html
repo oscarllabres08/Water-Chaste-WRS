@@ -3,23 +3,23 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
-    <meta name="theme-color" content="#063a7a" />
-    <meta name="description" content="Download Zoda WRS mobile apps — Customer and Seller." />
+    <meta name="theme-color" content="#0B3A96" />
+    <meta name="description" content="Download Water Chaste mobile apps — Customer and Rider." />
     <link rel="icon" type="image/png" href="logo.png" />
-    <title>Zoda WRS — Download Apps</title>
+    <title>Water Chaste — Download Apps</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@600;700;800;900&display=swap" rel="stylesheet" />
     <style>
       :root {
-        --wrs-navy: #063a7a;
-        --wrs-blue: #1265d6;
-        --wrs-cyan: #3ab1ff;
-        --text: #0a1b37;
+        --wrs-navy: #0B3A96;
+        --wrs-blue: #0074F0;
+        --wrs-cyan: #00B7F5;
+        --text: #07142E;
         --muted: #5a6f8f;
         --surface: #ffffff;
-        --border: rgba(18, 101, 214, 0.14);
-        --shadow: 0 12px 40px rgba(6, 58, 122, 0.12);
+        --border: rgba(0, 116, 240, 0.14);
+        --shadow: 0 12px 40px rgba(11, 58, 150, 0.12);
         --radius: 20px;
         --safe-top: env(safe-area-inset-top, 0px);
         --safe-bottom: env(safe-area-inset-bottom, 0px);
@@ -40,7 +40,7 @@
         min-height: 100dvh;
         font-family: 'Nunito', system-ui, -apple-system, Segoe UI, sans-serif;
         color: var(--text);
-        background: #e8f4fc;
+        background: #F3F8FC;
         line-height: 1.45;
       }
 
@@ -52,9 +52,9 @@
         position: fixed;
         inset: 0;
         background:
-          radial-gradient(circle at 10% 0%, rgba(58, 177, 255, 0.35), transparent 42%),
-          radial-gradient(circle at 90% 10%, rgba(18, 101, 214, 0.18), transparent 38%),
-          linear-gradient(180deg, #d9eeff 0%, #eef6fc 45%, #f8fbff 100%);
+          radial-gradient(circle at 10% 0%, rgba(0, 183, 245, 0.35), transparent 42%),
+          radial-gradient(circle at 90% 10%, rgba(0, 116, 240, 0.18), transparent 38%),
+          linear-gradient(180deg, #d9eeff 0%, #eef6fc 45%, #F5FAFE 100%);
         z-index: -1;
       }
 
@@ -70,23 +70,21 @@
       }
 
       .hero-logo-wrap {
-        width: 96px;
-        height: 96px;
+        width: min(210px, 58vw);
         margin: 0 auto 14px;
-        border-radius: 24px;
+        border-radius: 28px;
         background: var(--surface);
         box-shadow: var(--shadow);
         display: grid;
         place-items: center;
         padding: 8px;
-        border: 2px solid rgba(58, 177, 255, 0.25);
+        border: 2px solid rgba(0, 183, 245, 0.28);
       }
 
       .hero-logo {
         width: 100%;
-        height: 100%;
+        height: auto;
         object-fit: contain;
-        border-radius: 16px;
       }
 
       .hero-eyebrow {
@@ -143,12 +141,12 @@
         display: grid;
         place-items: center;
         font-size: 22px;
-        background: rgba(58, 177, 255, 0.14);
+        background: rgba(0, 183, 245, 0.14);
         margin-bottom: 12px;
       }
 
       .card-icon--lock {
-        background: rgba(6, 58, 122, 0.1);
+        background: rgba(11, 58, 150, 0.1);
       }
 
       .card-body h2 {
@@ -179,7 +177,7 @@
         font-weight: 800;
         padding: 4px 10px;
         border-radius: 999px;
-        background: rgba(18, 101, 214, 0.08);
+        background: rgba(0, 116, 240, 0.08);
         color: var(--wrs-blue);
       }
 
@@ -208,13 +206,13 @@
       .btn-primary {
         background: linear-gradient(135deg, var(--wrs-blue), var(--wrs-cyan));
         color: #fff;
-        box-shadow: 0 10px 24px rgba(18, 101, 214, 0.28);
+        box-shadow: 0 10px 24px rgba(0, 116, 240, 0.28);
       }
 
       .btn-outline {
         background: var(--surface);
         color: var(--wrs-navy);
-        border: 1.5px solid rgba(6, 58, 122, 0.22);
+        border: 1.5px solid rgba(11, 58, 150, 0.22);
       }
 
       .btn-block {
@@ -242,7 +240,7 @@
 
       .card-hint code {
         font-size: 11px;
-        background: rgba(6, 58, 122, 0.06);
+        background: rgba(11, 58, 150, 0.06);
         padding: 2px 6px;
         border-radius: 6px;
       }
@@ -288,7 +286,7 @@
       .modal-backdrop {
         position: absolute;
         inset: 0;
-        background: rgba(3, 38, 79, 0.55);
+        background: rgba(6, 33, 95, 0.55);
         backdrop-filter: blur(4px);
       }
 
@@ -322,7 +320,7 @@
         height: 36px;
         border: none;
         border-radius: 10px;
-        background: rgba(6, 58, 122, 0.06);
+        background: rgba(11, 58, 150, 0.06);
         color: var(--wrs-navy);
         font-size: 22px;
         line-height: 1;
@@ -374,13 +372,13 @@
         letter-spacing: 0.2em;
         text-align: center;
         color: var(--wrs-navy);
-        background: #f8fbff;
+        background: #F5FAFE;
       }
 
       .field input:focus {
         outline: none;
-        border-color: rgba(18, 101, 214, 0.45);
-        box-shadow: 0 0 0 3px rgba(58, 177, 255, 0.2);
+        border-color: rgba(0, 116, 240, 0.45);
+        box-shadow: 0 0 0 3px rgba(0, 183, 245, 0.2);
       }
 
       .password-field {
@@ -403,7 +401,7 @@
         height: 34px;
         border: none;
         border-radius: 8px;
-        background: rgba(18, 101, 214, 0.08);
+        background: rgba(0, 116, 240, 0.08);
         color: var(--wrs-blue);
         cursor: pointer;
         display: grid;
@@ -447,9 +445,9 @@
     <main class="shell">
       <header class="hero">
         <div class="hero-logo-wrap">
-          <img src="logo.png" alt="Zoda WRS" class="hero-logo" width="88" height="88" />
+          <img src="logo.png" alt="Water Chaste" class="hero-logo" />
         </div>
-        <p class="hero-eyebrow">Zoda Water Refilling Station</p>
+        <p class="hero-eyebrow">Water Chaste</p>
         <h1>Download our apps</h1>
         <p class="hero-lead">Order water from your phone or manage the store on the go.</p>
       </header>
@@ -477,7 +475,7 @@
         <article class="card card-seller">
           <div class="card-icon card-icon--lock" aria-hidden="true">🔒</div>
           <div class="card-body">
-            <h2>Seller App</h2>
+            <h2>Rider App</h2>
             <p>For store staff and owners only. PIN required to download.</p>
             <ul class="card-meta">
               <li>Android APK</li>
@@ -485,7 +483,7 @@
             </ul>
           </div>
 
-          <button type="button" id="unlock-seller-btn" class="btn btn-outline">Unlock Seller App</button>
+          <button type="button" id="unlock-seller-btn" class="btn btn-outline">Unlock Rider App</button>
 
           <a
             id="seller-download"
@@ -496,7 +494,7 @@
             tabindex="-1"
           >
             <span class="btn-icon" aria-hidden="true">⬇</span>
-            Download Seller App
+            Download Rider App
           </a>
 
           <p id="seller-unlocked-hint" class="card-hint card-hint--ok" hidden>
@@ -509,7 +507,7 @@
       </section>
 
       <footer class="site-footer">
-        <p>© <span id="year"></span> Zoda WRS · Pure water for a healthier tomorrow</p>
+        <p>© <span id="year"></span> Water Chaste · Pure water for a healthier tomorrow</p>
         <p class="site-footer-note">After installing, allow installs from unknown sources if Android asks.</p>
       </footer>
     </main>
@@ -520,7 +518,7 @@
         <button type="button" class="modal-close" data-close-modal aria-label="Close">×</button>
         <div class="modal-icon" aria-hidden="true">🔐</div>
         <h2 id="pin-modal-title">Enter staff PIN</h2>
-        <p class="modal-lead">Seller app is for authorized staff only.</p>
+        <p class="modal-lead">Rider app is for authorized staff only.</p>
         <form id="pin-form">
           <label class="field">
             <span>PIN</span>
@@ -551,15 +549,15 @@
     <script src="js/config.js"></script>
     <script>
       (function () {
-        const external = window.ZODA_DOWNLOAD_CFG || {};
+        const external = window.WATER_CHASTE_DOWNLOAD_CFG || {};
         const cfg = {
           customerApk: external.customerApkUrl || 'customer-app.apk',
           sellerApk: external.sellerApkUrl || 'seller-app.apk',
           supabaseUrl: (external.supabaseUrl || '').replace(/\/$/, ''),
           supabaseAnonKey: external.supabaseAnonKey || '',
-          sessionKey: 'zoda_seller_unlocked',
-          pinAttemptsKey: 'zoda_seller_pin_attempts',
-          pinLockoutKey: 'zoda_seller_pin_lockout_until',
+          sessionKey: 'waterchaste_rider_unlocked',
+          pinAttemptsKey: 'waterchaste_rider_pin_attempts',
+          pinLockoutKey: 'waterchaste_rider_pin_lockout_until',
           maxPinAttempts: 5,
           pinLockoutMs: 5 * 60 * 1000,
         };
@@ -886,7 +884,7 @@
                 pinConfigError.hidden = false;
                 if (result.reason === 'rpc_missing') {
                   pinConfigError.textContent =
-                    'PIN verification is not set up on the server yet. Ask the admin to run supabase/patches/seller-download-pin.sql in Supabase.';
+                    'PIN verification is not set up on the server yet. Ask the admin to run supabase/water-chaste.sql once in Supabase.';
                 } else if (result.reason === 'network') {
                   pinConfigError.textContent =
                     'Could not reach Supabase. Check download-site/js/config.js (supabaseUrl and supabaseAnonKey).';

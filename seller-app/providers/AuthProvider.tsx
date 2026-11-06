@@ -35,7 +35,7 @@ type AuthContextValue = {
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
 const WAITING_APPROVAL_MSG =
-  'Your registration is waiting for approval. You cannot use the Seller app until the store administrator approves your account in Admin → Staff Management.';
+  'Your registration is waiting for approval. You cannot sign in until the master admin approves your account on Staff account approval in the admin website.';
 
 function computeBusinessId(p: ProfileRow | null, userId: string): string | null {
   if (!p || p.role !== 'seller') return null;

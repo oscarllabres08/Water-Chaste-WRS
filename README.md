@@ -1,4 +1,4 @@
-# Zoda WRS
+# WRS Water Chaste
 
 Water Refilling Station system — **Admin Website**, **Backend / DB**, **Seller Mobile App**, at **Customer Mobile App**.
 
@@ -54,11 +54,9 @@ flowchart TB
 | Folder | Role sa bagong structure |
 | --- | --- |
 | `admin-web/` | Admin Website (Vite + Supabase — POS, inventory, reports, staff, analytics) |
-| `supabase/` | Backend / DB (Postgres, Auth, Realtime, RLS, Edge Functions) |
-| `mailer-api/` | Password-reset email (tumutulong sa Authentication) |
-| `seller-app/` | Seller Mobile App (Expo SDK 55) |
-| `customer-app/` | Customer Mobile App (Expo SDK 55) |
-| `customer-web/` | Legacy mobile-first web customer UI — papalitan ng `customer-app` bilang primary customer channel |
+| `supabase/` | Backend / DB. Run `supabase/water-chaste.sql` once. |
+| `seller-app/` | Rider mobile app (Expo SDK 55) |
+| `customer-app/` | Customer mobile app (Expo SDK 55) |
 
 ### Migration note (current code → target)
 
@@ -68,8 +66,8 @@ Ang **seller mobile app** ay naka-focus sa **Orders, Delivery, Customers, Notifi
 
 ## 1) Backend / DB (Supabase)
 
-1. Create a Supabase project.
-2. Run the SQL in `supabase/schema.sql` (Supabase Dashboard → SQL Editor).
+1. Use the Water Chaste Supabase project (`hjvwwxdyyugjchkeolyp`). Do not point apps at another client's project.
+2. In the Supabase SQL Editor, open `supabase/water-chaste.sql` and run the whole file once.
 3. Enable Realtime for tables (Dashboard → Database → Replication):
    - `public.orders`
    - `public.order_items`
@@ -78,7 +76,7 @@ Ang **seller mobile app** ay naka-focus sa **Orders, Delivery, Customers, Notifi
 
 ### Storage bucket (logos + QR)
 
-Create a public bucket named **`wrs-assets`** in Supabase Storage.
+`supabase/water-chaste.sql` creates the public bucket **`wrs-assets`**.
 
 ### Seller / staff accounts
 
@@ -88,7 +86,7 @@ After register (`profiles` row), set role and team as needed:
 update public.profiles set role = 'seller' where user_id = '<YOUR_AUTH_UID>';
 ```
 
-Master admin (store owner) at staff approval — see `supabase/schema.sql` at seller app Profile → Manage accounts.
+Master admin (store owner) and staff approval are included in `supabase/water-chaste.sql`.
 
 Push notifications: `supabase/functions/README.md`.
 
@@ -143,15 +141,3 @@ npm run start
 ```
 
 (Same `EXPO_PUBLIC_SUPABASE_*` values as seller-app and admin `VITE_*` keys.)
-
----
-
-## 5) Customer website (legacy)
-
-Optional Vite app sa `customer-web/` — same Supabase env pattern. Para sa bagong structure, gamitin ang **Customer Mobile App**; panatilihin lang kung kailangan pa ng web fallback.
-
-```bash
-cd customer-web
-# .env.local.example → .env.local (VITE_SUPABASE_*)
-npm run dev
-```

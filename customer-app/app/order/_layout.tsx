@@ -12,6 +12,8 @@ export default function OrderLayout() {
         headerStyle: { backgroundColor: theme.colors.bg },
         headerTintColor: theme.colors.text,
         headerShadowVisible: false,
+        animation: 'slide_from_right',
+        animationDuration: 280,
       }}
     />
   );

@@ -11,55 +11,63 @@ import {
 } from '../lib/authInputSecurity';
 import { supabase } from '../lib/supabase';
 
-function WaterDropIcon({ className }: { className?: string }) {
+function FeatureIcon({ name }: { name: 'drop' | 'box' | 'people' }) {
+  const common = { width: 18, height: 18, viewBox: '0 0 24 24', fill: 'none', 'aria-hidden': true as const };
+  if (name === 'drop') {
+    return (
+      <svg {...common}>
+        <path
+          d="M12 3c-3.2 4.6-6 8-6 11.2a6 6 0 1 0 12 0C18 11 15.2 7.6 12 3z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }
+  if (name === 'box') {
+    return (
+      <svg {...common}>
+        <path
+          d="M12 3.5L4.5 7.2v9.6L12 20.5l7.5-3.7V7.2L12 3.5z"
+          stroke="currentColor"
+          strokeWidth="1.8"
+          strokeLinejoin="round"
+        />
+        <path d="M4.5 7.2L12 11l7.5-3.8M12 11v9.5" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+      </svg>
+    );
+  }
   return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" aria-hidden>
-      <path
-        d="M12 2.5c-3.2 4.8-6 8.4-6 12a6 6 0 1 0 12 0c0-3.6-2.8-7.2-6-12z"
-        fill="currentColor"
-        opacity="0.9"
-      />
-      <path
-        d="M12 8.5c1.2 1.8 2.2 3.2 2.2 4.8a2.2 2.2 0 1 1-4.4 0c0-1.6 1-3 2.2-4.8z"
-        fill="rgba(255,255,255,0.35)"
-      />
-    </svg>
-  );
-}
-
-function WaveIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 64 24" fill="none" aria-hidden>
-      <path
-        d="M0 14c8-8 16-8 24 0s16 8 24 0 16-8 16 0v10H0V14z"
-        fill="currentColor"
-        opacity="0.25"
-      />
-      <path
-        d="M0 18c6-5 12-5 18 0s12 5 18 0 12-5 12 0v6H0v-6z"
-        fill="currentColor"
-        opacity="0.45"
-      />
+    <svg {...common}>
+      <circle cx="9" cy="8" r="2.6" stroke="currentColor" strokeWidth="1.8" />
+      <path d="M3.8 18.5c.4-2.8 2.4-4.3 5.2-4.3s4.8 1.5 5.2 4.3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" />
+      <circle cx="16.2" cy="9" r="2" stroke="currentColor" strokeWidth="1.6" />
+      <path d="M14.6 18.5c.2-1.8 1.3-3 3-3.2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
     </svg>
   );
 }
 
 export function AuthPage() {
-  const { user, loading, profileLoading, isStoreOwner, gateMessage, clearGateMessage } = useAuth();
+  const { user, loading, profileLoading, isStoreOwner, isApprovedStaff, gateMessage, clearGateMessage } = useAuth();
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [mode, setMode] = useState<'signin' | 'signup'>('signin');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
 
-  if (!loading && !profileLoading && user && isStoreOwner) {
+  if (!loading && !profileLoading && user && (isStoreOwner || isApprovedStaff)) {
     return <Navigate to="/" replace />;
   }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(null);
+    setNotice(null);
     clearGateMessage();
     setBusy(true);
     try {
@@ -72,6 +80,10 @@ export function AuthPage() {
         return;
       }
       if (mode === 'signup') {
+        if (!name.trim()) {
+          setError('Please enter your full name.');
+          return;
+        }
         const confirm = sanitizeAuthPasswordSignup(confirmPassword, true);
         if (confirm !== creds.password) {
           setError('Password and confirm password do not match.');
@@ -85,8 +97,47 @@ export function AuthPage() {
         });
         if (err) throw err;
       } else {
-        const { error: err } = await supabase.auth.signUp({ email: creds.email, password: creds.password });
+        const { data, error: err } = await supabase.auth.signUp({
+          email: creds.email,
+          password: creds.password,
+          options: {
+            data: {
+              display_name: name.trim(),
+              phone: phone.trim(),
+              signup_channel: 'admin',
+            },
+          },
+        });
         if (err) throw err;
+        if (!data.session) {
+          setNotice(
+            'Account created. Confirm your email if asked, then sign in. If a master admin already exists, they must approve you on Staff account approval first.'
+          );
+          setMode('signin');
+          setPassword('');
+          setConfirmPassword('');
+          return;
+        }
+        const payload: { p_display_name: string; p_phone?: string } = { p_display_name: name.trim() };
+        if (phone.trim()) payload.p_phone = phone.trim();
+        const { data: reg, error: regErr } = await supabase.rpc('register_pending_seller', payload);
+        if (regErr) throw regErr;
+        const result = reg as { ok?: boolean; owner?: boolean; approved?: boolean; pending?: boolean; message?: string } | null;
+        if (result?.ok === false) {
+          await supabase.auth.signOut();
+          setError(result.message ?? 'Registration could not be submitted.');
+          return;
+        }
+        if (result?.owner === true && result?.approved === true) {
+          return;
+        }
+        await supabase.auth.signOut();
+        setNotice(
+          'Registration submitted. You can sign in only after the master admin approves this account on Staff account approval.'
+        );
+        setMode('signin');
+        setPassword('');
+        setConfirmPassword('');
       }
     } catch (ex) {
       setError(ex instanceof Error ? ex.message : 'Authentication failed');
@@ -99,57 +150,79 @@ export function AuthPage() {
 
   return (
     <div className="auth-page">
-      <aside className="auth-hero" aria-label="Zoda WRS branding">
+      <aside className="auth-hero" aria-label="Water Chaste branding">
         <div className="auth-hero-glow" aria-hidden />
-        <WaterDropIcon className="auth-deco auth-deco--drop-1" />
-        <WaterDropIcon className="auth-deco auth-deco--drop-2" />
-        <WaterDropIcon className="auth-deco auth-deco--drop-3" />
-        <span className="auth-deco auth-deco--bubble auth-deco--b1" aria-hidden />
-        <span className="auth-deco auth-deco--bubble auth-deco--b2" aria-hidden />
-        <span className="auth-deco auth-deco--bubble auth-deco--b3" aria-hidden />
-
         <div className="auth-hero-content">
           <div className="auth-hero-logo-wrap">
-            <img src="/logo.png" alt="Zoda WRS" className="auth-hero-logo" />
+            <img src="/logo.png" alt="Water Chaste" className="auth-hero-logo" />
           </div>
-          <h1 className="auth-hero-title">Zoda WRS Admin</h1>
-          <p className="auth-hero-tagline">Water refilling station back-office</p>
-
+          <div className="auth-hero-copy">
+            <p className="auth-hero-kicker">Water refilling station</p>
+            <h1 className="auth-hero-title">Water Chaste Admin</h1>
+            <p className="auth-hero-tagline">Inventory, orders, and staff in one back-office.</p>
+          </div>
           <ul className="auth-hero-features">
             <li>
               <span className="auth-hero-feature-icon" aria-hidden>
-                💧
+                <FeatureIcon name="drop" />
               </span>
               Inventory &amp; POS
             </li>
             <li>
               <span className="auth-hero-feature-icon" aria-hidden>
-                📦
+                <FeatureIcon name="box" />
               </span>
               Orders &amp; delivery
             </li>
             <li>
               <span className="auth-hero-feature-icon" aria-hidden>
-                👥
+                <FeatureIcon name="people" />
               </span>
               Staff &amp; customers
             </li>
           </ul>
-
-          <WaveIcon className="auth-hero-wave" />
         </div>
       </aside>
 
       <main className="auth-panel">
         <div className="auth-card">
-          <h2 className="auth-panel-title">{mode === 'signin' ? 'Store admin sign in' : 'Register store owner'}</h2>
-          <p className="hint auth-panel-hint">
-            Same Supabase account as the Seller and Customer apps. Only the <strong>master admin (owner)</strong> can
-            use this dashboard.
+          <h2 className="auth-panel-title">{mode === 'signin' ? 'Sign in' : 'Create account'}</h2>
+          <p className="auth-panel-hint">
+            The first account becomes the master admin. Later accounts stay pending until that admin approves them.
           </p>
+          {notice ? <p className="success-text">{notice}</p> : null}
           {blocked ? <p className="error-text">{blocked}</p> : null}
           {error ? <p className="error-text">{error}</p> : null}
-          <form onSubmit={(e) => void submit(e)}>
+          <form className="auth-form" onSubmit={(e) => void submit(e)}>
+            {mode === 'signup' ? (
+              <>
+                <div className="field">
+                  <label htmlFor="full-name">Full name</label>
+                  <input
+                    id="full-name"
+                    type="text"
+                    autoComplete="name"
+                    placeholder="Your name"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    required
+                    maxLength={80}
+                  />
+                </div>
+                <div className="field">
+                  <label htmlFor="phone">Contact number</label>
+                  <input
+                    id="phone"
+                    type="tel"
+                    autoComplete="tel"
+                    placeholder="09xx xxx xxxx"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    maxLength={20}
+                  />
+                </div>
+              </>
+            ) : null}
             <div className="field">
               <label htmlFor="email">Email</label>
               <input
@@ -199,22 +272,23 @@ export function AuthPage() {
               </div>
             ) : null}
             <button type="submit" className="btn btn-primary btn-water auth-submit-btn" disabled={busy}>
-              {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create owner account'}
+              {busy ? 'Please wait…' : mode === 'signin' ? 'Sign in' : 'Create account'}
             </button>
           </form>
-          <p className="hint auth-panel-footer">
+          <p className="auth-panel-footer">
             {mode === 'signin' ? (
               <>
-                First store?{' '}
+                Need an account?{' '}
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="auth-switch"
                   onClick={() => {
                     setConfirmPassword('');
+                    setNotice(null);
                     setMode('signup');
                   }}
                 >
-                  Register as owner
+                  Register
                 </button>
               </>
             ) : (
@@ -222,9 +296,10 @@ export function AuthPage() {
                 Already have an account?{' '}
                 <button
                   type="button"
-                  className="btn btn-ghost btn-sm"
+                  className="auth-switch"
                   onClick={() => {
                     setConfirmPassword('');
+                    setNotice(null);
                     setMode('signin');
                   }}
                 >

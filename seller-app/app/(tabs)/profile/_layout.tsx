@@ -4,7 +4,7 @@ import { profileSubpageScreenOptions } from './stackOptions';
 
 export default function ProfileLayout() {
   return (
-    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right' }}>
+    <Stack screenOptions={{ headerShown: false, animation: 'slide_from_right', animationDuration: 280 }}>
       <Stack.Screen name="index" />
       <Stack.Screen name="customers" options={profileSubpageScreenOptions('Customers list')} />
       <Stack.Screen name="settings" options={profileSubpageScreenOptions('Account settings')} />

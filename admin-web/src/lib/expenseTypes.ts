@@ -1,5 +1,3 @@
-export type ExpenseBusinessUnit = 'wrs' | 'laundry';
-
 export const EXPENSE_TYPES = [
   { value: 'water_bill', label: 'Water Bill' },
   { value: 'electric_bill', label: 'Electric Bill' },

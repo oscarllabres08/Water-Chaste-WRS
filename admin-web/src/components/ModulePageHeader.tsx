@@ -17,7 +17,7 @@ type Props = {
 export function ModulePageHeader({
   title,
   subtitle,
-  branch = 'Zoda WRS Main Branch',
+  branch = 'Water Chaste Main Branch',
   tagline = 'Pure water for a healthier tomorrow',
 }: Props) {
   const [now, setNow] = useState(formatNow);

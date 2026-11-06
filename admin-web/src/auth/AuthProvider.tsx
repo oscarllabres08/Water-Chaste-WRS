@@ -56,11 +56,13 @@ type AuthContextValue = {
 
   profile: ProfileRow | null;
 
-  /** Store owner id — same as user.id for master admin; used for products/orders queries. */
+  /** Store owner id. For approved staff this is the master admin id used by store queries. */
 
   businessId: string | null;
 
   isStoreOwner: boolean;
+
+  isApprovedStaff: boolean;
 
   gateMessage: string | null;
 
@@ -89,6 +91,14 @@ function isOwnerProfile(p: ProfileRow | null): boolean {
   if (team == null) return true;
 
   return false;
+
+}
+
+function isApprovedStaff(p: ProfileRow | null): boolean {
+
+  if (!p || p.role !== 'seller' || p.seller_team_role !== 'staff') return false;
+
+  return (p.seller_join_status ?? 'pending') === 'approved' && Boolean(p.seller_workspace_owner_id);
 
 }
 
@@ -166,7 +176,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
             ).trim() || null;
 
-          const { data: reg, error: regErr } = await supabase.rpc('register_pending_seller', {
+          const { error: regErr } = await supabase.rpc('register_pending_seller', {
 
             p_display_name: displayName,
 
@@ -174,23 +184,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
           if (!regErr) {
 
-            const regObj = reg as { ok?: boolean; owner?: boolean; approved?: boolean } | null;
+            const { data: data2 } = await supabase
 
-            if (regObj?.ok === true && regObj?.owner === true && regObj?.approved === true) {
+              .from('profiles')
 
-              const { data: data2 } = await supabase
+              .select('role,display_name,seller_team_role,seller_join_status,seller_workspace_owner_id,store_code')
 
-                .from('profiles')
+              .eq('user_id', uid)
 
-                .select('role,display_name,seller_team_role,seller_join_status,seller_workspace_owner_id,store_code')
+              .maybeSingle();
 
-                .eq('user_id', uid)
-
-                .maybeSingle();
-
-              row = (data2 ?? null) as ProfileRow | null;
-
-            }
+            row = (data2 ?? null) as ProfileRow | null;
 
           }
 
@@ -202,7 +206,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (!row || row.role !== 'seller') {
 
-        setGateMessage('Admin access requires a store owner account. Staff should use the Seller mobile app.');
+        setGateMessage('This account is not a store admin. Register on this page, or ask the master admin to approve you.');
 
         await supabase.auth.signOut();
 
@@ -220,31 +224,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
         if (status === 'pending') {
 
-          setGateMessage('Your staff account is pending approval. Ask the store owner to approve you in Admin → Staff.');
+          setGateMessage(
 
-        } else if (status === 'rejected') {
+            'Your account is waiting for approval. The master admin must approve it on Staff account approval before you can sign in.'
 
-          setGateMessage('Your staff registration was rejected. Use the Seller mobile app only after approval.');
+          );
 
-        } else {
+          await supabase.auth.signOut();
 
-          setGateMessage('Staff accounts use the Seller mobile app for orders and delivery. Admin website is for the store owner only.');
+          setProfile(null);
+
+          return;
 
         }
 
-        await supabase.auth.signOut();
+        if (status === 'rejected') {
 
-        setProfile(null);
+          setGateMessage('Your registration was rejected by the master admin.');
 
-        return;
+          await supabase.auth.signOut();
+
+          setProfile(null);
+
+          return;
+
+        }
 
       }
 
 
 
-      if (!isOwnerProfile(row)) {
+      if (!isOwnerProfile(row) && !isApprovedStaff(row)) {
 
-        setGateMessage('Only the master admin (store owner) can sign in here.');
+        setGateMessage('Only an approved store account can sign in here.');
 
         await supabase.auth.signOut();
 
@@ -330,7 +342,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
 
-  const businessId = useMemo(() => (session?.user?.id && isOwnerProfile(profile) ? session.user.id : null), [session?.user?.id, profile]);
+  const businessId = useMemo(() => {
+
+    if (!session?.user?.id || !profile) return null;
+
+    if (isOwnerProfile(profile)) return session.user.id;
+
+    if (isApprovedStaff(profile)) return profile.seller_workspace_owner_id;
+
+    return null;
+
+  }, [session?.user?.id, profile]);
 
 
 
@@ -351,6 +373,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       businessId,
 
       isStoreOwner: isOwnerProfile(profile),
+
+      isApprovedStaff: isApprovedStaff(profile),
 
       gateMessage,
 

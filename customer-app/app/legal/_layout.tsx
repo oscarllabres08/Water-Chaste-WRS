@@ -10,6 +10,8 @@ export default function LegalLayout() {
         headerStyle: { backgroundColor: theme.colors.bg },
         headerTintColor: theme.colors.primaryDark,
         headerShadowVisible: false,
+        animation: 'slide_from_right',
+        animationDuration: 280,
         headerBackTitleVisible: false,
         headerTitleStyle: {
           fontFamily: theme.font.extrabold,

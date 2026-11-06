@@ -8,6 +8,7 @@ export default function ProfileLayout() {
       screenOptions={{
         headerShown: false,
         animation: 'slide_from_right',
+        animationDuration: 280,
       }}
     >
       <Stack.Screen name="index" />

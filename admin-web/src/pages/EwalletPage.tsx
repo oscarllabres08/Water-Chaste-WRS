@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 import { createPortal } from 'react-dom';
 
 import { ImageUploadField } from '../components/ImageUploadField';
+import { CheckIcon } from '../components/UiIcons';
 import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../auth/AuthProvider';
 import { publicWrsAssetUrl } from '../lib/format';
@@ -165,7 +166,7 @@ export function EwalletPage() {
             <span>Account name</span>
             <input
               type="text"
-              placeholder="e.g. Juan Dela Cruz / Zoda WRS"
+              placeholder="e.g. Juan Dela Cruz / Water Chaste"
               value={accountName}
               onChange={(e) => setAccountName(e.target.value)}
               disabled={saving || loading}
@@ -229,7 +230,7 @@ export function EwalletPage() {
                 onClick={(e) => e.stopPropagation()}
               >
                 <div className="ewallet-success-icon" aria-hidden>
-                  ✓
+                  <CheckIcon />
                 </div>
                 <h2 id="ewallet-success-title" className="ewallet-success-title">
                   GCash saved

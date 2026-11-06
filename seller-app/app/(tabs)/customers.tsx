@@ -371,9 +371,9 @@ export default function CustomersScreen() {
                     width: 32,
                     height: 32,
                     borderRadius: 12,
-                    backgroundColor: 'rgba(18,101,214,0.08)',
+                    backgroundColor: 'rgba(0,114,240,0.08)',
                     borderWidth: 1,
-                    borderColor: 'rgba(18,101,214,0.12)',
+                    borderColor: 'rgba(0,114,240,0.12)',
                     alignItems: 'center',
                     justifyContent: 'center',
                   }}
@@ -409,9 +409,9 @@ export default function CustomersScreen() {
                       height: 44,
                       borderRadius: 14,
                       overflow: 'hidden',
-                      backgroundColor: 'rgba(18,101,214,0.10)',
+                      backgroundColor: 'rgba(0,114,240,0.10)',
                       borderWidth: 1,
-                      borderColor: 'rgba(18,101,214,0.18)',
+                      borderColor: 'rgba(0,114,240,0.18)',
                       alignItems: 'center',
                       justifyContent: 'center',
                     }}
@@ -438,10 +438,10 @@ export default function CustomersScreen() {
                           borderRadius: 999,
                           borderWidth: 1,
                           borderColor: theme.colors.border,
-                          backgroundColor: 'rgba(18,101,214,0.06)',
+                          backgroundColor: 'rgba(0,114,240,0.06)',
                         }}
                       >
-                        <Text variant="chip" weight="extrabold" style={{ color: 'rgba(10,27,55,0.75)' }}>
+                        <Text variant="chip" weight="extrabold" style={{ color: 'rgba(7,20,46,0.75)' }}>
                           {item.orderCount} orders
                         </Text>
                       </View>
@@ -501,7 +501,7 @@ export default function CustomersScreen() {
                         variant="muted"
                         weight="bold"
                         numberOfLines={2}
-                        style={{ marginTop: 6, color: 'rgba(10,27,55,0.82)' }}
+                        style={{ marginTop: 6, color: 'rgba(7,20,46,0.82)' }}
                       >
                         {item.containerIdentifierNotes
                           ? `Container #: ${item.containerIdentifierNotes}`

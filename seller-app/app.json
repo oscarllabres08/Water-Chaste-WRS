@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Zoda WRS Owner",
-    "slug": "seller-app",
+    "name": "Water Chaste Rider",
+    "slug": "water-chaste-rider",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "sellerapp",
+    "scheme": "waterchasterider",
     "userInterfaceStyle": "automatic",
     "androidStatusBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#E8F4FC",
+      "backgroundColor": "#F3F8FC",
       "translucent": false
     },
     "splash": {
@@ -19,7 +19,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aquabeast.sellerapp"
+      "bundleIdentifier": "com.waterchaste.rider",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
@@ -28,8 +29,8 @@
         "backgroundColor": "#FFFFFF",
         "foregroundImage": "./assets/adaptive-icon.png"
       },
-      "package": "com.aquabeast.sellerapp",
-      "versionCode": 3,
+      "package": "com.waterchaste.rider",
+      "versionCode": 1,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
@@ -57,11 +58,11 @@
     "experiments": {
       "typedRoutes": true
     },
+    "updates": {
+      "enabled": false
+    },
     "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "82338448-d39f-4dc8-a07e-88a24d3afdd4"
-      }
+      "router": {}
     }
   }
 }

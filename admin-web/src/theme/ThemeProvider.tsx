@@ -1,6 +1,6 @@
 import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
-const STORAGE_KEY = 'zoda-admin-theme';
+const STORAGE_KEY = 'water-chaste-admin-theme';
 
 type Theme = 'light' | 'dark';
 

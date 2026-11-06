@@ -155,7 +155,7 @@ export default function NotificationsScreen() {
               borderRadius: 16,
               borderWidth: 1,
               borderColor: theme.colors.border,
-              backgroundColor: n.read_at ? '#FFFFFF' : 'rgba(18,101,214,0.06)',
+              backgroundColor: n.read_at ? '#FFFFFF' : 'rgba(0,114,240,0.06)',
             }}
           >
             <View style={{ flexDirection: 'row', gap: 10 }}>

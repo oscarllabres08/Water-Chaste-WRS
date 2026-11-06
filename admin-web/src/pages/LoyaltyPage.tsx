@@ -2,7 +2,9 @@ import { useCallback, useEffect, useState, type FormEvent } from 'react';
 
 
 
+import { ConfirmModal } from '../components/ConfirmModal';
 import { ModulePageHeader } from '../components/ModulePageHeader';
+import { supabase } from '../lib/supabase';
 
 import { useAuth } from '../auth/AuthProvider';
 
@@ -19,6 +21,15 @@ import {
 import { verifyLoyaltyVoucherCode } from '../lib/verifyLoyaltyVoucher';
 
 
+
+const FREE_REFILL_POINTS = 10;
+const CLOSE_LIMIT = 8;
+
+type LoyaltyCustomer = {
+  customerId: string;
+  name: string;
+  points: number;
+};
 
 type VerifyUiState =
 
@@ -54,6 +65,12 @@ export function LoyaltyPage() {
 
   const [verifyState, setVerifyState] = useState<VerifyUiState>({ kind: 'idle' });
 
+  const [customers, setCustomers] = useState<LoyaltyCustomer[]>([]);
+  const [customersLoading, setCustomersLoading] = useState(true);
+  const [giveTarget, setGiveTarget] = useState<LoyaltyCustomer | null>(null);
+  const [giveBusy, setGiveBusy] = useState(false);
+  const [giveNotice, setGiveNotice] = useState<string | null>(null);
+
   const [programDetailsOpen, setProgramDetailsOpen] = useState(
     () => typeof window !== 'undefined' && window.matchMedia('(min-width: 768px)').matches
   );
@@ -62,7 +79,7 @@ export function LoyaltyPage() {
 
   const branch =
 
-    profile?.display_name?.trim() ? `${profile.display_name.trim()} · Zoda WRS` : 'Zoda WRS Main Branch';
+    profile?.display_name?.trim() ? `${profile.display_name.trim()} · Water Chaste` : 'Water Chaste Main Branch';
 
 
 
@@ -102,11 +119,60 @@ export function LoyaltyPage() {
 
 
 
+  const loadCustomers = useCallback(async () => {
+    if (!businessId) return;
+    setCustomersLoading(true);
+    const { data, error: balErr } = await supabase
+      .from('loyalty_balances')
+      .select('customer_id, points_balance')
+      .eq('seller_id', businessId)
+      .gt('points_balance', 0)
+      .order('points_balance', { ascending: false });
+    if (balErr) {
+      setError(balErr.message);
+      setCustomers([]);
+      setCustomersLoading(false);
+      return;
+    }
+    const rows = (data ?? []) as { customer_id: string; points_balance: number }[];
+    const ids = rows.map((row) => row.customer_id);
+    const names = new Map<string, string>();
+    if (ids.length > 0) {
+      const { data: profiles } = await supabase.from('profiles').select('user_id, display_name').in('user_id', ids);
+      for (const profileRow of profiles ?? []) {
+        const row = profileRow as { user_id: string; display_name: string | null };
+        names.set(row.user_id, row.display_name?.trim() || 'Customer');
+      }
+    }
+    setCustomers(
+      rows.map((row) => ({
+        customerId: row.customer_id,
+        name: names.get(row.customer_id) || 'Customer',
+        points: row.points_balance,
+      }))
+    );
+    setCustomersLoading(false);
+  }, [businessId]);
+
   useEffect(() => {
-
     void load();
+    void loadCustomers();
+  }, [load, loadCustomers]);
 
-  }, [load]);
+  useEffect(() => {
+    if (!businessId) return;
+    const channel = supabase
+      .channel(`admin-loyalty-${businessId}`)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'loyalty_balances', filter: `seller_id=eq.${businessId}` },
+        () => void loadCustomers()
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [businessId, loadCustomers]);
 
   useEffect(() => {
     const mq = window.matchMedia('(min-width: 768px)');
@@ -145,6 +211,34 @@ export function LoyaltyPage() {
   }
 
 
+
+  async function confirmGiveRefill() {
+    if (!giveTarget) return;
+    setGiveBusy(true);
+    setError(null);
+    setGiveNotice(null);
+    const { data, error: rpcError } = await supabase.rpc('seller_give_free_refill', {
+      p_customer_id: giveTarget.customerId,
+    });
+    const result = data as { ok?: boolean; message?: string; points_remaining?: number; error?: string } | null;
+    if (rpcError || result?.ok === false) {
+      const missing = rpcError?.message?.includes('seller_give_free_refill');
+      setError(
+        missing
+          ? 'Run the latest seller_give_free_refill function from supabase/water-chaste.sql in Supabase, then try again.'
+          : result?.message || rpcError?.message || 'Could not give the free refill.'
+      );
+      setGiveBusy(false);
+      return;
+    }
+    const left = result?.points_remaining ?? Math.max(0, giveTarget.points - FREE_REFILL_POINTS);
+    setGiveNotice(
+      `${giveTarget.name} received 1 free refill. ${left === 0 ? 'Points are back to 0.' : `${left} points left.`}`
+    );
+    setGiveTarget(null);
+    setGiveBusy(false);
+    await loadCustomers();
+  }
 
   async function onVerifyVoucher(e: FormEvent) {
 
@@ -218,7 +312,7 @@ export function LoyaltyPage() {
 
           msg.includes('seller_verify_loyalty') || msg.includes('schema cache')
 
-            ? `${msg} Run the latest loyalty SQL in Supabase (schema.sql).`
+            ? `${msg} Run supabase/water-chaste.sql once in Supabase.`
 
             : msg,
 
@@ -232,7 +326,8 @@ export function LoyaltyPage() {
 
   }
 
-
+  const ready = customers.filter((row) => row.points >= FREE_REFILL_POINTS);
+  const close = customers.filter((row) => row.points < FREE_REFILL_POINTS).slice(0, CLOSE_LIMIT);
 
   return (
 
@@ -250,8 +345,8 @@ export function LoyaltyPage() {
 
       {error ? <p className="error-text module-alert">{error}</p> : null}
 
-
-
+      <div className="loyalty-board">
+      <div className="loyalty-side">
       <div className="card card-flat loyalty-settings-card">
         <div className="loyalty-program-head">
           <h2 className="inventory-section-title">Program status</h2>
@@ -291,131 +386,138 @@ export function LoyaltyPage() {
         {saving ? <p className="muted-block loyalty-saving-hint">Saving…</p> : null}
       </div>
 
-
-
       <div className="card card-flat loyalty-verify-card">
-
-        <h2 className="inventory-section-title">Verify voucher (free refill)</h2>
-
+        <h2 className="inventory-section-title">Verify voucher</h2>
         <p className="muted-block loyalty-settings-desc">
-
-          Customer shows their code from the app after redeeming 10 points. Enter the code here — if valid, it is marked{' '}
-
-          <strong>used</strong> and you may give <strong>1 free container refill</strong>. Codes expire 3 days after issue.
-
+          Enter the app code. If it is valid, it is marked used and you can give 1 free refill. Codes expire after 3 days.
         </p>
-
         <form className="loyalty-verify-form" onSubmit={(e) => void onVerifyVoucher(e)}>
-
           <div className="field loyalty-verify-field">
-
             <label htmlFor="voucher-code">Voucher code</label>
-
             <input
-
               id="voucher-code"
-
               type="text"
-
               value={voucherCode}
-
               onChange={(e) => {
-
                 setVoucherCode(e.target.value);
-
                 setVerifyState({ kind: 'idle' });
-
               }}
-
               placeholder="e.g. REF-A1B2C3"
-
               autoComplete="off"
-
               spellCheck={false}
-
               disabled={verifyBusy}
-
             />
-
           </div>
-
           <button type="submit" className="btn btn-primary btn-sm" disabled={verifyBusy}>
-
             {verifyBusy ? 'Verifying…' : 'Verify code'}
-
           </button>
-
         </form>
-
-
-
         {verifyState.kind === 'success' ? (
-
           <div className="loyalty-verify-result loyalty-verify-result--success" role="status">
-
             <strong>Success</strong>
-
             <p>{verifyState.message}</p>
-
             <p className="loyalty-verify-code">{verifyState.code}</p>
-
           </div>
-
         ) : null}
-
         {verifyState.kind === 'used' ? (
-
           <div className="loyalty-verify-result loyalty-verify-result--muted" role="status">
-
             <strong>Already used</strong>
-
             <p>{verifyState.message}</p>
-
             {verifyState.usedAt ? (
-
               <p className="muted-block">Used at: {new Date(verifyState.usedAt).toLocaleString('en-PH')}</p>
-
             ) : null}
-
           </div>
-
         ) : null}
-
         {verifyState.kind === 'error' ? (
-
           <div className="loyalty-verify-result loyalty-verify-result--error" role="alert">
-
             <strong>Could not verify</strong>
-
             <p>{verifyState.message}</p>
-
           </div>
-
         ) : null}
-
       </div>
-
-
 
       <div className="card card-flat loyalty-help-card">
         <details className="loyalty-details loyalty-help-details">
           <summary>How it works</summary>
           <ul className="loyalty-help-list">
-            <li>Turn the program <strong>Active</strong> during promos or ongoing loyalty.</li>
-            <li>
-              In <strong>Inventory</strong>, edit each product and check &quot;Available for loyalty points&quot; (only
-              when active).
-            </li>
-            <li>1 delivered unit of an eligible product = 1 point (online orders, not utang, not walk-in POS).</li>
-            <li>10 points → customer redeems a 3-day refill voucher code in the app.</li>
-            <li>At the store, verify the code on this page before giving the free refill.</li>
+            <li>Turn the program Active during promos or ongoing loyalty.</li>
+            <li>In Inventory, mark products that earn points.</li>
+            <li>1 delivered unit = 1 point. 10 points = 1 free refill.</li>
           </ul>
         </details>
       </div>
+      </div>
 
+      <div className="loyalty-main">
+      <div className="card card-flat loyalty-customers-card">
+        <h2 className="inventory-section-title">Free refill</h2>
+        <p className="muted-block loyalty-settings-desc">
+          10 points = 1 free refill. Customers at 10 or more are highlighted. Give the refill here and those 10 points are used.
+        </p>
+        {giveNotice ? <p className="loyalty-give-notice">{giveNotice}</p> : null}
+        {customersLoading ? <p className="muted-block">Loading customers…</p> : null}
+
+        {!customersLoading && ready.length === 0 && close.length === 0 ? (
+          <p className="muted-block">No customers are close to a free refill yet.</p>
+        ) : null}
+
+        {ready.length > 0 ? (
+          <ul className="loyalty-customer-list">
+            {ready.map((row) => (
+              <li key={row.customerId} className="loyalty-customer loyalty-customer--ready">
+                <div>
+                  <strong>{row.name}</strong>
+                  <small>Ready for 1 free refill</small>
+                </div>
+                <span className="loyalty-points-pill">{row.points} pts</span>
+                <button type="button" className="btn btn-primary btn-sm" onClick={() => setGiveTarget(row)}>
+                  Give free refill
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {close.length > 0 ? (
+          <>
+            <h3 className="loyalty-close-title">Close to a free refill</h3>
+            <ul className="loyalty-customer-list">
+              {close.map((row) => (
+                <li key={row.customerId} className="loyalty-customer">
+                  <div>
+                    <strong>{row.name}</strong>
+                    <small>{FREE_REFILL_POINTS - row.points} point{FREE_REFILL_POINTS - row.points === 1 ? '' : 's'} to go</small>
+                  </div>
+                  <span className="loyalty-points-pill loyalty-points-pill--close">{row.points} / {FREE_REFILL_POINTS}</span>
+                </li>
+              ))}
+            </ul>
+          </>
+        ) : null}
+      </div>
+      </div>
+      </div>
+
+      <ConfirmModal
+        open={giveTarget != null}
+        title="Give free refill?"
+        message={
+          giveTarget ? (
+            <>
+              Give <strong>{giveTarget.name}</strong> 1 free refill? This uses 10 points
+              {giveTarget.points - FREE_REFILL_POINTS > 0
+                ? ` and leaves ${giveTarget.points - FREE_REFILL_POINTS}.`
+                : ' and sets the balance back to 0.'}
+            </>
+          ) : null
+        }
+        confirmLabel="Give free refill"
+        busy={giveBusy}
+        onCancel={() => {
+          if (!giveBusy) setGiveTarget(null);
+        }}
+        onConfirm={() => void confirmGiveRefill()}
+      />
     </div>
-
   );
-
 }
-

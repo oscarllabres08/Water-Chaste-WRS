@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 
 import { PasswordInput } from '../components/PasswordInput';
 import { SettingsSection } from '../components/SettingsSection';
@@ -6,7 +7,6 @@ import { ModulePageHeader } from '../components/ModulePageHeader';
 import { useAuth } from '../auth/AuthProvider';
 import { useNotifications } from '../notifications/NotificationsProvider';
 import { supabase } from '../lib/supabase';
-import { useTheme } from '../theme/ThemeProvider';
 
 function SettingsToggle({
   label,
@@ -46,7 +46,9 @@ const CLEAR_HISTORY_CONFIRM_PHRASE = 'DELETE ALL HISTORY';
 
 export function SettingsPage() {
   const { user, businessId, isStoreOwner } = useAuth();
-  const { darkMode, setDarkMode } = useTheme();
+  const [params] = useSearchParams();
+  const sectionParam = params.get('section');
+  const section = sectionParam === 'account' || sectionParam === 'notifications' ? sectionParam : 'general';
   const {
     notificationsEnabled,
     soundEnabled,
@@ -267,7 +269,7 @@ export function SettingsPage() {
     const { data: raw, error: rpcError } = await supabase.rpc('owner_clear_store_sales_history');
     if (rpcError) {
       const hint = rpcError.message.includes('owner_clear_store_sales_history')
-        ? ' Run supabase/patches/owner-clear-store-sales-history.sql in Supabase SQL Editor.'
+        ? ' Run supabase/water-chaste.sql in the Supabase SQL Editor.'
         : '';
       setClearError(rpcError.message + hint);
       setClearBusy(false);
@@ -278,7 +280,6 @@ export function SettingsPage() {
       ok?: boolean;
       deleted_orders?: number;
       deleted_pos_sales?: number;
-      deleted_laundry_pos_sales?: number;
     } | null;
     if (res?.ok !== true) {
       setClearError('Could not clear history.');
@@ -289,9 +290,7 @@ export function SettingsPage() {
     setClearConfirmText('');
     setClearPassword('');
     setClearSuccess(
-      `Cleared: ${res.deleted_orders ?? 0} online order(s), ${res.deleted_pos_sales ?? 0} POS sale(s)${
-        (res.deleted_laundry_pos_sales ?? 0) > 0 ? `, ${res.deleted_laundry_pos_sales} laundry POS sale(s)` : ''
-      }. Products, inventory, and expenses were not changed.`
+      `Cleared: ${res.deleted_orders ?? 0} online order(s), ${res.deleted_pos_sales ?? 0} POS sale(s). Products, inventory, and expenses were not changed.`
     );
     setClearBusy(false);
   }
@@ -299,10 +298,36 @@ export function SettingsPage() {
   return (
     <div className="settings-page">
       <ModulePageHeader
-        title="Settings"
-        subtitle="Manage notifications, account security, appearance, and help."
+        title={section === 'account' ? 'Account Settings' : section === 'notifications' ? 'Notification' : 'General Settings'}
+        subtitle={
+          section === 'account'
+            ? 'Change the password for this store owner account.'
+            : section === 'notifications'
+              ? 'Choose which alerts and sounds this dashboard plays.'
+              : 'Store tools, staff access, and the rider download PIN.'
+        }
       />
 
+      {section === 'general' ? (
+        <div className="settings-shortcuts">
+          <Link to="/staff" className="station-action">
+            <span>
+              <strong>Staff management</strong>
+              <small>Approve rider accounts for this station</small>
+            </span>
+            <span aria-hidden>→</span>
+          </Link>
+          <Link to="/ewallet" className="station-action">
+            <span>
+              <strong>E-wallet</strong>
+              <small>GCash and payment QR used at the store</small>
+            </span>
+            <span aria-hidden>→</span>
+          </Link>
+        </div>
+      ) : null}
+
+      {section === 'notifications' ? (
       <SettingsSection
         title="Notification settings"
         subtitle="Pop-ups and sound for new orders and activity"
@@ -337,10 +362,13 @@ export function SettingsPage() {
         />
         {prefsSaving ? <p className="muted-block settings-saving-hint">Saving…</p> : null}
       </SettingsSection>
+      ) : null}
 
+      {section === 'account' ? (
       <SettingsSection
         title="Account settings"
         subtitle="Change your login password"
+        defaultOpen
         icon={
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
             <circle cx="12" cy="8" r="3.5" stroke="currentColor" strokeWidth="1.8" />
@@ -364,35 +392,41 @@ export function SettingsPage() {
               onChange={(e) => setCurrentPassword(e.target.value)}
             />
           </div>
-          <div className="field">
-            <label htmlFor="new-password">New password</label>
-            <PasswordInput
-              id="new-password"
-              autoComplete="new-password"
-              placeholder="Enter new password (min. 6 characters)"
-              value={newPassword}
-              onChange={(e) => setNewPassword(e.target.value)}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="confirm-password">Confirm new password</label>
-            <PasswordInput
-              id="confirm-password"
-              autoComplete="new-password"
-              placeholder="Confirm new password"
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
+          <div className="settings-form-grid">
+            <div className="field">
+              <label htmlFor="new-password">New password</label>
+              <PasswordInput
+                id="new-password"
+                autoComplete="new-password"
+                placeholder="Min. 6 characters"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="confirm-password">Confirm new password</label>
+              <PasswordInput
+                id="confirm-password"
+                autoComplete="new-password"
+                placeholder="Confirm new password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+              />
+            </div>
           </div>
           <button type="submit" className="btn btn-primary btn-sm" disabled={passwordSaving}>
             {passwordSaving ? 'Updating…' : 'Change password'}
           </button>
         </form>
       </SettingsSection>
+      ) : null}
 
+      {section === 'general' ? (
+      <>
       <SettingsSection
         title="Seller app download PIN"
         subtitle="PIN required on the public download page to unlock the Seller app APK"
+        defaultOpen
         icon={
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
             <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="1.8" />
@@ -418,27 +452,29 @@ export function SettingsPage() {
         {downloadPinError ? <p className="error-text module-alert">{downloadPinError}</p> : null}
         {downloadPinSuccess ? <p className="success-text module-alert">{downloadPinSuccess}</p> : null}
         <form className="settings-password-form" onSubmit={(e) => void onSetDownloadPin(e)}>
-          <div className="field">
-            <label htmlFor="download-pin">Set PIN to download seller app</label>
-            <PasswordInput
-              id="download-pin"
-              autoComplete="new-password"
-              placeholder="Enter new PIN (min. 4 characters)"
-              value={downloadPin}
-              onChange={(e) => setDownloadPin(e.target.value)}
-              maxLength={32}
-            />
-          </div>
-          <div className="field">
-            <label htmlFor="download-pin-confirm">Confirm PIN</label>
-            <PasswordInput
-              id="download-pin-confirm"
-              autoComplete="new-password"
-              placeholder="Confirm new PIN"
-              value={downloadPinConfirm}
-              onChange={(e) => setDownloadPinConfirm(e.target.value)}
-              maxLength={32}
-            />
+          <div className="settings-form-grid">
+            <div className="field">
+              <label htmlFor="download-pin">Set PIN to download seller app</label>
+              <PasswordInput
+                id="download-pin"
+                autoComplete="new-password"
+                placeholder="Min. 4 characters"
+                value={downloadPin}
+                onChange={(e) => setDownloadPin(e.target.value)}
+                maxLength={32}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="download-pin-confirm">Confirm PIN</label>
+              <PasswordInput
+                id="download-pin-confirm"
+                autoComplete="new-password"
+                placeholder="Confirm new PIN"
+                value={downloadPinConfirm}
+                onChange={(e) => setDownloadPinConfirm(e.target.value)}
+                maxLength={32}
+              />
+            </div>
           </div>
           <div className="field">
             <label htmlFor="download-pin-password">Enter account password to verify it&apos;s you</label>
@@ -545,36 +581,10 @@ export function SettingsPage() {
           <li>
             <strong>Notifications</strong> — Use the bell icon (top-right) to see order and activity alerts.
           </li>
-          <li>
-            <strong>Laundry dashboard</strong> — See today&apos;s net income and recent POS transactions when using Laundry mode.
-          </li>
-          <li>
-            <strong>Switch business</strong> — Use the sidebar button to switch between Water Refilling and Laundry.
-          </li>
         </ul>
       </SettingsSection>
-
-      <SettingsSection
-        title="Dark mode"
-        subtitle="Toggle dark theme for the entire admin panel"
-        icon={
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" aria-hidden>
-            <path
-              d="M21 14.5A8.5 8.5 0 1114.5 3a6.5 6.5 0 006.5 11.5z"
-              stroke="currentColor"
-              strokeWidth="1.8"
-              strokeLinejoin="round"
-            />
-          </svg>
-        }
-      >
-        <SettingsToggle
-          label="Dark theme"
-          description="Apply a dark color scheme across all admin pages, forms, tables, and modals."
-          checked={darkMode}
-          onChange={setDarkMode}
-        />
-      </SettingsSection>
+      </>
+      ) : null}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import {
   parseContainerIds,
   recordContainerReturn,
 } from '../lib/containerReturn';
+import { CheckBoxIcon } from './UiIcons';
 import { supabase } from '../lib/supabase';
 
 type Props = {
@@ -94,7 +95,7 @@ export function ContainerReturnPanel({
               disabled={busy}
               onClick={() => toggle(label)}
             >
-              {isOn ? '☑ ' : '☐ '}
+              <CheckBoxIcon checked={isOn} />
               {label}
             </button>
           );

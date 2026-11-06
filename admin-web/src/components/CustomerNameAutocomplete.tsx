@@ -29,6 +29,7 @@ type CustomerNameAutocompleteProps = {
   hint?: React.ReactNode;
   className?: string;
   disabled?: boolean;
+  onCommit?: (value: string) => void;
 };
 
 export function CustomerNameAutocomplete({
@@ -39,6 +40,7 @@ export function CustomerNameAutocomplete({
   hint,
   className = '',
   disabled = false,
+  onCommit,
 }: CustomerNameAutocompleteProps) {
   const listId = useId();
   const rootRef = useRef<HTMLDivElement>(null);
@@ -61,6 +63,13 @@ export function CustomerNameAutocomplete({
   }
 
   function onInputKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      setOpen(false);
+      setHighlight(-1);
+      onCommit?.(value);
+      return;
+    }
     if (!open || suggestions.length === 0) {
       if (e.key === 'ArrowDown' && value.trim().length >= 1) setOpen(true);
       return;
@@ -71,9 +80,6 @@ export function CustomerNameAutocomplete({
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlight((i) => (i <= 0 ? suggestions.length - 1 : i - 1));
-    } else if (e.key === 'Enter' && highlight >= 0) {
-      e.preventDefault();
-      pick(suggestions[highlight]!);
     } else if (e.key === 'Escape') {
       setOpen(false);
       setHighlight(-1);
@@ -107,6 +113,7 @@ export function CustomerNameAutocomplete({
               if (!rootRef.current?.contains(document.activeElement)) {
                 setOpen(false);
                 setHighlight(-1);
+                onCommit?.(value);
               }
             }, 120);
           }}
@@ -114,7 +121,7 @@ export function CustomerNameAutocomplete({
         />
         {open && suggestions.length > 0 ? (
           <div className="pos-customer-suggestions-panel" role="presentation">
-            <p className="pos-customer-suggestions-head">Existing customer — tap to select</p>
+            <p className="pos-customer-suggestions-head">Matching customer — tap to use this name</p>
             <ul id={listId} className="pos-customer-suggestions" role="listbox">
               {suggestions.map((option, i) => {
                 const avatarUrl = publicWrsAssetUrl(supabase, option.avatarPath);

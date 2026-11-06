@@ -129,9 +129,9 @@ export function NotificationsMenu({
                 width: 38,
                 height: 38,
                 borderRadius: 12,
-                backgroundColor: 'rgba(18,101,214,0.08)',
+                backgroundColor: 'rgba(0,114,240,0.08)',
                 borderWidth: 1,
-                borderColor: 'rgba(18,101,214,0.12)',
+                borderColor: 'rgba(0,114,240,0.12)',
                 alignItems: 'center',
                 justifyContent: 'center',
               }}
@@ -183,7 +183,7 @@ export function NotificationsMenu({
                     borderRadius: 16,
                     borderWidth: 1,
                     borderColor: theme.colors.border,
-                    backgroundColor: n.read_at ? '#FFFFFF' : 'rgba(18,101,214,0.06)',
+                    backgroundColor: n.read_at ? '#FFFFFF' : 'rgba(0,114,240,0.06)',
                   }}
                 >
                   <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10 }}>

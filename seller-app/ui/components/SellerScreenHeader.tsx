@@ -4,7 +4,7 @@ import { Text } from './Text';
 import { SellerNotificationsButton } from './SellerNotificationsButton';
 
 export function SellerScreenHeader({
-  title = 'Zoda WRS',
+  title = 'Water Chaste',
   subtitle,
 }: {
   title?: string;

@@ -366,9 +366,9 @@ export default function DeliveryScreen() {
             flexDirection: 'row',
             padding: 5,
             borderRadius: 16,
-            backgroundColor: '#EAF2FF',
+            backgroundColor: '#E5F3FC',
             borderWidth: 1,
-            borderColor: 'rgba(18,101,214,0.10)',
+            borderColor: 'rgba(0,114,240,0.10)',
             gap: 5,
           }}
         >
@@ -445,7 +445,7 @@ export default function DeliveryScreen() {
                   borderRadius: 8,
                   borderWidth: 1.5,
                   borderColor: payFilter === key ? theme.colors.primary : theme.colors.border,
-                  backgroundColor: payFilter === key ? 'rgba(18,101,214,0.1)' : '#FFF',
+                  backgroundColor: payFilter === key ? 'rgba(0,114,240,0.1)' : '#FFF',
                 }}
               >
                 <Text weight="extrabold" style={{ fontSize: 13, color: payFilter === key ? theme.colors.primary : theme.colors.muted }}>
@@ -533,7 +533,7 @@ export default function DeliveryScreen() {
               borderRadius: 8,
               borderWidth: 1.5,
               borderColor: theme.colors.primary,
-              backgroundColor: 'rgba(18,101,214,0.1)',
+              backgroundColor: 'rgba(0,114,240,0.1)',
               alignItems: 'center',
             }}
           >
@@ -613,7 +613,7 @@ function DeliveredShowMore({
           borderRadius: 8,
           borderWidth: 1.5,
           borderColor: p,
-          backgroundColor: 'rgba(18,101,214,0.1)',
+          backgroundColor: 'rgba(0,114,240,0.1)',
           alignItems: 'center',
         }}
       >
@@ -638,7 +638,7 @@ function StatusTab({
   filled?: boolean;
   onPress: () => void;
 }) {
-  const activeBg = filled && active ? theme.colors.primary : active ? 'rgba(18,101,214,0.14)' : 'transparent';
+  const activeBg = filled && active ? theme.colors.primary : active ? 'rgba(0,114,240,0.14)' : 'transparent';
   const activeColor = filled && active ? '#FFFFFF' : active ? theme.colors.primary : theme.colors.muted;
 
   return (
@@ -655,7 +655,7 @@ function StatusTab({
         gap: 4,
         backgroundColor: activeBg,
         borderWidth: active && !filled ? 1 : 0,
-        borderColor: 'rgba(18,101,214,0.22)',
+        borderColor: 'rgba(0,114,240,0.22)',
       }}
     >
       <Ionicons name={icon} size={16} color={activeColor} />
@@ -693,7 +693,7 @@ function DeliveredOrderRow({
         paddingVertical: 12,
         paddingHorizontal: 14,
         gap: 12,
-        backgroundColor: pressed ? 'rgba(18,101,214,0.04)' : '#FFFFFF',
+        backgroundColor: pressed ? 'rgba(0,114,240,0.04)' : '#FFFFFF',
         borderBottomWidth: isLast ? 0 : 1,
         borderBottomColor: theme.colors.border,
       })}
@@ -704,7 +704,7 @@ function DeliveredOrderRow({
           height: 44,
           borderRadius: 22,
           overflow: 'hidden',
-          backgroundColor: '#EEF4FF',
+          backgroundColor: '#E7F4FC',
           alignItems: 'center',
           justifyContent: 'center',
         }}
@@ -797,7 +797,7 @@ function ActiveDeliveryCard({
               width: 42,
               height: 42,
               borderRadius: 14,
-              backgroundColor: 'rgba(18,101,214,0.1)',
+              backgroundColor: 'rgba(0,114,240,0.1)',
               alignItems: 'center',
               justifyContent: 'center',
               flexShrink: 0,
@@ -837,7 +837,7 @@ function ActiveDeliveryCard({
             borderRadius: 12,
             borderWidth: 1.5,
             borderColor: p,
-            backgroundColor: pressed ? 'rgba(18,101,214,0.06)' : '#FFFFFF',
+            backgroundColor: pressed ? 'rgba(0,114,240,0.06)' : '#FFFFFF',
           })}
         >
           <Ionicons name="map-outline" size={18} color={p} />

@@ -82,7 +82,7 @@ export default function NotificationSettingsScreen() {
       const { data: raw, error: rpcErr } = await supabase.rpc('seller_send_test_notification');
       if (rpcErr) {
         const hint = rpcErr.message.includes('Could not find the function')
-          ? '\n\nRun supabase/patches/seller-test-notification.sql in Supabase SQL Editor.'
+          ? '\n\nRun supabase/water-chaste.sql once in the Supabase SQL Editor.'
           : '';
         setError(rpcErr.message + hint);
         return;
@@ -170,8 +170,8 @@ export default function NotificationSettingsScreen() {
                   serverPushConfigured
                     ? 'Server push webhook configured'
                     : serverPushConfigured === false
-                      ? 'Server NOT configured — run supabase/patches/push-notifications-setup.sql + deploy push-notify'
-                      : 'Server status unknown — run supabase/patches/seller-push-status.sql'
+                      ? 'Server NOT configured — run supabase/water-chaste.sql, then deploy push-notify'
+                      : 'Server status unknown — run supabase/water-chaste.sql'
                 }
               />
               <StatusLine
@@ -258,7 +258,7 @@ function ToggleRow({
         value={value}
         disabled={disabled}
         onValueChange={onChange}
-        trackColor={{ false: 'rgba(10,27,55,0.12)', true: 'rgba(18,101,214,0.35)' }}
+        trackColor={{ false: 'rgba(7,20,46,0.12)', true: 'rgba(0,114,240,0.35)' }}
         thumbColor={value ? theme.colors.primary : '#fff'}
       />
     </View>

@@ -1,6 +1,6 @@
 import type { PropsWithChildren, ReactNode } from 'react';
 import { Platform, Pressable, StyleSheet, type PressableProps, View } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { theme } from '../theme';
 import { PrimaryGradient } from './PrimaryGradient';
 import { Text } from './Text';
@@ -14,10 +14,10 @@ type Props = PressableProps & {
 };
 
 export function Button({ variant = 'primary', title, leadingIcon, children, style, disabled, ...rest }: PropsWithChildren<Props>) {
-  const pressed = useSharedValue(0);
+  const scale = useSharedValue(1);
 
   const animatedStyle = useAnimatedStyle(() => ({
-    transform: [{ scale: withTiming(pressed.value ? 0.98 : 1, { duration: 120 }) }],
+    transform: [{ scale: scale.value }],
   }));
 
   const colors = (() => {
@@ -62,14 +62,14 @@ export function Button({ variant = 'primary', title, leadingIcon, children, styl
             ? { color: 'rgba(255,255,255,0.22)', borderless: true }
             : variant === 'danger'
               ? { color: 'rgba(229,72,77,0.16)', borderless: true }
-              : { color: 'rgba(6,58,122,0.1)', borderless: true }
+              : { color: 'rgba(11,58,150,0.1)', borderless: true }
         }
         onPressIn={(e) => {
-          pressed.value = 1;
+          scale.value = withSpring(0.96, { damping: 14, stiffness: 340 });
           rest.onPressIn?.(e);
         }}
         onPressOut={(e) => {
-          pressed.value = 0;
+          scale.value = withSpring(1, { damping: 12, stiffness: 260 });
           rest.onPressOut?.(e);
         }}
         style={

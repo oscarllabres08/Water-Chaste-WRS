@@ -1,4 +1,5 @@
 import { Modal, Pressable, View } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 import { theme } from '../theme';
@@ -24,6 +25,7 @@ export function LogoutConfirmModal({ visible, onDismiss, onConfirm, busy = false
           padding: theme.spacing.md,
         }}
       >
+        <Animated.View entering={ZoomIn.duration(280).springify().damping(15)} key={visible ? 'open' : 'closed'}>
         <Pressable onPress={() => {}} style={{ borderRadius: theme.radius.xl, backgroundColor: theme.colors.card, borderWidth: 1, borderColor: theme.colors.border, padding: theme.spacing.lg, ...theme.shadow.card }}>
           <View style={{ alignItems: 'center', marginBottom: theme.spacing.sm }}>
             <View
@@ -56,6 +58,7 @@ export function LogoutConfirmModal({ visible, onDismiss, onConfirm, busy = false
             </View>
           </View>
         </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );

@@ -2,5 +2,12 @@ import { PRIVACY_POLICY } from '../../lib/legalContent';
 import { LegalDocumentScreen } from '../../ui/components/LegalDocumentScreen';
 
 export default function PrivacyScreen() {
-  return <LegalDocumentScreen title="Privacy Policy" sections={PRIVACY_POLICY} />;
+  return (
+    <LegalDocumentScreen
+      title="Privacy Policy"
+      intro="How Water Chaste collects, uses, and protects your information."
+      icon="shield-checkmark"
+      sections={PRIVACY_POLICY}
+    />
+  );
 }

@@ -3,8 +3,8 @@ import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
 import { useEffect } from 'react';
-import 'react-native-reanimated';
-import { Platform, Pressable, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
+import { Pressable } from 'react-native';
 
 import { useColorScheme } from '../components/useColorScheme';
 import { AuthProvider, useAuth } from '../providers/AuthProvider';
@@ -172,7 +172,7 @@ function AuthGate() {
       <Stack
         screenOptions={{
           animation: 'fade_from_bottom',
-          animationDuration: 220,
+          animationDuration: 320,
           /** Avoid double headers: e.g. native "order" bar + in-screen "Order details". */
           headerShown: false,
         }}
@@ -191,7 +191,9 @@ function AuthGate() {
       ) : null}
 
       {toast ? (
-        <View
+        <Animated.View
+          entering={FadeInDown.duration(320).springify().damping(16)}
+          exiting={FadeOutUp.duration(180)}
           pointerEvents="box-none"
           style={{
             position: 'absolute',
@@ -241,7 +243,7 @@ function AuthGate() {
               {toast.body}
             </Text>
           </Pressable>
-        </View>
+        </Animated.View>
       ) : null}
     </>
   );

@@ -17,12 +17,14 @@ const DEFAULT_SLOT_WIDTH = 44;
 export function SalesBarChart({
   points,
   slotWidth = DEFAULT_SLOT_WIDTH,
+  height = 220,
 }: {
   points: TimelinePoint[];
   slotWidth?: number;
+  height?: number;
 }) {
   const scrollRef = useRef<HTMLDivElement>(null);
-  const h = 220;
+  const h = height;
   const pad = { l: 48, r: 16, t: 16, b: 36 };
   const innerH = h - pad.t - pad.b;
   const n = Math.max(1, points.length);
@@ -76,7 +78,7 @@ export function SalesBarChart({
         >
           {yLines.map((t) => (
             <g key={t.v}>
-              <line x1={pad.l} y1={t.y} x2={w - pad.r} y2={t.y} stroke="rgba(18,101,214,0.12)" />
+              <line x1={pad.l} y1={t.y} x2={w - pad.r} y2={t.y} stroke="rgba(0,114,240,0.12)" />
               <text x={pad.l - 8} y={t.y + 4} textAnchor="end" className="sales-chart-axis">
                 {t.v >= 1000 ? `${Math.round(t.v / 1000)}k` : Math.round(t.v)}
               </text>
@@ -102,13 +104,13 @@ export function SalesBarChart({
                     y={onlineY}
                     width={barW}
                     height={onlineH}
-                    fill="#3ab1ff"
+                    fill="#00B7F5"
                     rx={hasWalk ? 0 : 4}
                     ry={hasWalk ? 0 : 4}
                   />
                 ) : null}
                 {hasWalk ? (
-                  <rect x={x} y={walkY} width={barW} height={walkH} fill="#2ecc71" rx={4} ry={4} />
+                  <rect x={x} y={walkY} width={barW} height={walkH} fill="#2FB84A" rx={4} ry={4} />
                 ) : null}
                 <title>{`${p.label}: ${money(p.total)} total (${money(p.online)} online, ${money(p.walkIn)} walk-in)`}</title>
               </g>
@@ -257,7 +259,7 @@ export function SalesLineChart({
 
             <g key={t.v}>
 
-              <line x1={pad.l} y1={t.y} x2={w - pad.r} y2={t.y} stroke="rgba(18,101,214,0.12)" />
+              <line x1={pad.l} y1={t.y} x2={w - pad.r} y2={t.y} stroke="rgba(0,114,240,0.12)" />
 
               <text x={pad.l - 8} y={t.y + 4} textAnchor="end" className="sales-chart-axis">
 
@@ -269,11 +271,11 @@ export function SalesLineChart({
 
           ))}
 
-          <path d={line('total')} fill="none" stroke="#1265d6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d={line('total')} fill="none" stroke="#0074F0" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
 
-          <path d={line('online')} fill="none" stroke="#3ab1ff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 3" />
+          <path d={line('online')} fill="none" stroke="#00B7F5" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 3" />
 
-          <path d={line('walkIn')} fill="none" stroke="#2ecc71" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 3" />
+          <path d={line('walkIn')} fill="none" stroke="#2FB84A" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" strokeDasharray="4 3" />
 
           {points.map((p, i) => {
 
@@ -283,7 +285,7 @@ export function SalesLineChart({
 
               <g key={`pt-${p.key}`}>
 
-                <circle cx={toX(i)} cy={toY(p.total)} r={4.5} fill="#1265d6" stroke="#fff" strokeWidth="1.5" />
+                <circle cx={toX(i)} cy={toY(p.total)} r={4.5} fill="#0074F0" stroke="#fff" strokeWidth="1.5" />
 
               </g>
 
@@ -347,7 +349,7 @@ export function SalesDonutChart({
 
         style={{
 
-          background: `conic-gradient(#1265d6 0 ${onlinePct}%, #2ecc71 ${onlinePct}% 100%)`,
+          background: `conic-gradient(#0074F0 0 ${onlinePct}%, #2FB84A ${onlinePct}% 100%)`,
 
         }}
 

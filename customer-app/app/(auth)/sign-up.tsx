@@ -8,16 +8,17 @@ import {
   sanitizeAuthPasswordSignup,
 } from '../../lib/authInputSecurity';
 import { LEGAL_VERSION } from '../../lib/legalContent';
-import { getLegalOnboardingAcceptedAt, hasAcceptedLegalOnboarding } from '../../lib/legalOnboarding';
+import { setLegalOnboardingAccepted } from '../../lib/legalOnboarding';
 import { supabase } from '../../lib/supabase';
 import { Screen } from '../../ui/components/Screen';
 import { Card } from '../../ui/components/Card';
 import { Text } from '../../ui/components/Text';
 import { TextField } from '../../ui/components/TextField';
 import { Button } from '../../ui/components/Button';
+import { LegalAcceptanceRow } from '../../ui/components/LegalAcceptanceRow';
 import { theme } from '../../ui/theme';
 
-const authLogo = require('../../assets/icon.png');
+const authLogo = require('../../assets/logo.png');
 
 export default function SignUpScreen() {
   const router = useRouter();
@@ -27,6 +28,7 @@ export default function SignUpScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
+  const [accepted, setAccepted] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
@@ -48,12 +50,12 @@ export default function SignUpScreen() {
         setError('Passwords do not match.');
         return;
       }
-      if (!(await hasAcceptedLegalOnboarding())) {
-        router.replace('/(auth)/legal-welcome');
+      if (!accepted) {
+        setError('Please agree to the Terms & Conditions and Privacy Policy to create an account.');
         return;
       }
 
-      const acceptedAt = (await getLegalOnboardingAcceptedAt()) ?? new Date().toISOString();
+      const acceptedAt = await setLegalOnboardingAccepted();
       const { data, error: err } = await supabase.auth.signUp({
         email: creds.email,
         password: creds.password,
@@ -96,16 +98,22 @@ export default function SignUpScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
       <ScrollView
+        style={{ flex: 1 }}
+        bounces={false}
+        alwaysBounceVertical={false}
+        overScrollMode="never"
         keyboardDismissMode="on-drag"
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: theme.spacing.md, paddingBottom: 280, flexGrow: 1 }}
+        automaticallyAdjustKeyboardInsets
+        contentContainerStyle={{ padding: theme.spacing.md, paddingBottom: theme.spacing.xl }}
         showsVerticalScrollIndicator={false}
       >
         <View style={{ alignItems: 'center', marginBottom: theme.spacing.sm }}>
           <Image
             source={authLogo}
-            style={{ width: 108, height: 108, borderRadius: 26 }}
+            style={{ width: 280, height: 168 }}
             resizeMode="contain"
+            accessibilityLabel="Water Chaste"
             accessibilityIgnoresInvertColors
           />
         </View>
@@ -157,12 +165,13 @@ export default function SignUpScreen() {
                 passwordToggleable
                 maxLength={128}
               />
+              <LegalAcceptanceRow checked={accepted} onToggle={() => setAccepted((v) => !v)} />
               {error ? (
                 <Text weight="bold" style={{ color: theme.colors.danger }}>
                   {error}
                 </Text>
               ) : null}
-              <Button title={loading ? 'Please wait…' : 'Create account'} disabled={loading} onPress={submit} />
+              <Button title={loading ? 'Please wait…' : 'Create account'} disabled={loading || !accepted} onPress={submit} />
             </View>
           </Card>
 

@@ -1,6 +1,7 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 
 import { ConfirmModal } from '../components/ConfirmModal';
+import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../auth/AuthProvider';
 import { supabase } from '../lib/supabase';
 
@@ -14,7 +15,7 @@ type Row = {
 };
 
 export function StaffPage() {
-  const { user, businessId, refreshProfile } = useAuth();
+  const { user, businessId, refreshProfile, isStoreOwner } = useAuth();
   const [rows, setRows] = useState<Row[]>([]);
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState<string | null>(null);
@@ -53,7 +54,7 @@ export function StaffPage() {
         }))
       );
       if (qErr.message.includes('owner_list_workspace_staff')) {
-        setError('Staff list loaded without email. Run supabase/patches/fix-staff-pending-approval.sql in Supabase.');
+        setError('Staff list loaded without email. Run supabase/water-chaste.sql once in Supabase.');
       }
     }
     setLoading(false);
@@ -119,104 +120,107 @@ export function StaffPage() {
   const pending = useMemo(() => rows.filter((r) => r.seller_join_status === 'pending'), [rows]);
   const approved = useMemo(() => rows.filter((r) => r.seller_join_status === 'approved'), [rows]);
 
+  if (!isStoreOwner) {
+    return (
+      <PageHeader
+        title="Staff account approval"
+        description="Only the master admin can approve or reject accounts."
+      />
+    );
+  }
+
   return (
-    <>
-      <header className="page-header">
-        <h1>Staff Management</h1>
-        <p>Approve staff who register in the Seller mobile app — they share this store&apos;s orders and customers.</p>
-      </header>
+    <div className="staff-page">
+      <PageHeader
+        title="Staff account approval"
+        description="Approve or reject new accounts from the admin site and the Rider app. They cannot sign in until you approve them."
+      />
       {error ? <p className="error-text">{error}</p> : null}
-      {loading ? <p>Loading…</p> : null}
 
-      <div className="card">
-        <h2 style={{ margin: '0 0 10px', fontSize: 17 }}>Pending approval ({pending.length})</h2>
-        {pending.length === 0 ? (
-          <p style={{ color: 'var(--muted)', fontWeight: 600 }}>No pending registrations.</p>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Contact No.</th>
-                  <th>Registered</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {pending.map((r) => (
-                  <tr key={r.user_id}>
-                    <td>{r.display_name ?? '—'}</td>
-                    <td>{r.email ?? '—'}</td>
-                    <td>{r.phone ?? '—'}</td>
-                    <td>{new Date(r.created_at).toLocaleDateString()}</td>
-                    <td>
-                      <div className="row-actions">
-                        <button
-                          type="button"
-                          className="btn btn-primary btn-sm"
-                          disabled={busyId === r.user_id}
-                          onClick={() => void setStatus(r.user_id, 'approved')}
-                        >
-                          Approve
-                        </button>
-                        <button
-                          type="button"
-                          className="btn btn-danger btn-sm"
-                          disabled={busyId === r.user_id}
-                          onClick={() => void setStatus(r.user_id, 'rejected')}
-                        >
-                          Reject
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
+      <div className="staff-summary">
+        <article className="staff-summary-card staff-summary-card--pending">
+          <span>Waiting</span>
+          <strong>{loading ? '—' : pending.length}</strong>
+        </article>
+        <article className="staff-summary-card staff-summary-card--active">
+          <span>Active staff</span>
+          <strong>{loading ? '—' : approved.length}</strong>
+        </article>
       </div>
 
-      <div className="card">
-        <h2 style={{ margin: '0 0 10px', fontSize: 17 }}>Active staff ({approved.length})</h2>
-        {approved.length === 0 ? (
-          <p style={{ color: 'var(--muted)', fontWeight: 600 }}>No approved staff yet.</p>
+      <section className="card staff-section">
+        <div className="staff-section-head">
+          <h2>Pending approval</h2>
+          <span className="chip pending">{pending.length}</span>
+        </div>
+        {loading ? (
+          <p className="staff-empty">Loading…</p>
+        ) : pending.length === 0 ? (
+          <p className="staff-empty">No pending registrations.</p>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Email</th>
-                  <th>Contact No.</th>
-                  <th />
-                </tr>
-              </thead>
-              <tbody>
-                {approved.map((r) => (
-                  <tr key={r.user_id}>
-                    <td>{r.display_name ?? '—'}</td>
-                    <td>{r.email ?? '—'}</td>
-                    <td>{r.phone ?? '—'}</td>
-                    <td>
-                      <button
-                        type="button"
-                        className="btn btn-danger btn-sm"
-                        disabled={busyId === r.user_id}
-                        onClick={() => setRemoveTarget(r)}
-                      >
-                        Remove
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+          <ul className="staff-list">
+            {pending.map((r) => (
+              <StaffCard
+                key={r.user_id}
+                row={r}
+                tone="pending"
+                actions={
+                  <>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={busyId === r.user_id}
+                      onClick={() => void setStatus(r.user_id, 'approved')}
+                    >
+                      Approve
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-danger btn-sm"
+                      disabled={busyId === r.user_id}
+                      onClick={() => void setStatus(r.user_id, 'rejected')}
+                    >
+                      Reject
+                    </button>
+                  </>
+                }
+              />
+            ))}
+          </ul>
         )}
-      </div>
+      </section>
+
+      <section className="card staff-section">
+        <div className="staff-section-head">
+          <h2>Active staff</h2>
+          <span className="chip ok">{approved.length}</span>
+        </div>
+        {loading ? (
+          <p className="staff-empty">Loading…</p>
+        ) : approved.length === 0 ? (
+          <p className="staff-empty">No approved staff yet.</p>
+        ) : (
+          <ul className="staff-list">
+            {approved.map((r) => (
+              <StaffCard
+                key={r.user_id}
+                row={r}
+                tone="active"
+                actions={
+                  <button
+                    type="button"
+                    className="btn btn-danger btn-sm"
+                    disabled={busyId === r.user_id}
+                    onClick={() => setRemoveTarget(r)}
+                  >
+                    Remove
+                  </button>
+                }
+              />
+            ))}
+          </ul>
+        )}
+      </section>
 
       <ConfirmModal
         open={removeTarget != null}
@@ -235,6 +239,43 @@ export function StaffPage() {
         }}
         onConfirm={() => void confirmRemoveStaff()}
       />
-    </>
+    </div>
+  );
+}
+
+function staffInitial(row: Row) {
+  const source = row.display_name?.trim() || row.email?.trim() || '?';
+  return source[0]?.toUpperCase() ?? '?';
+}
+
+function staffRegisteredLabel(iso: string) {
+  return new Date(iso).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+}
+
+function StaffCard({
+  row,
+  tone,
+  actions,
+}: {
+  row: Row;
+  tone: 'pending' | 'active';
+  actions: ReactNode;
+}) {
+  const name = row.display_name?.trim() || 'Unnamed staff';
+  return (
+    <li className={`staff-card staff-card--${tone}`}>
+      <span className="staff-avatar" aria-hidden>
+        {staffInitial(row)}
+      </span>
+      <div className="staff-card-body">
+        <strong>{name}</strong>
+        <span className="staff-email">{row.email ?? 'No email on file'}</span>
+        <div className="staff-meta">
+          <span>{row.phone?.trim() || 'No contact number'}</span>
+          <span>Registered {staffRegisteredLabel(row.created_at)}</span>
+        </div>
+      </div>
+      <div className="staff-actions">{actions}</div>
+    </li>
   );
 }

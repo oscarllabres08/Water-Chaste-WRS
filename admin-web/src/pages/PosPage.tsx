@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
 import { useAuth } from '../auth/AuthProvider';
 import { CustomerNameAutocomplete } from '../components/CustomerNameAutocomplete';
+import { BoxIcon, DropIcon } from '../components/UiIcons';
 import { money, publicWrsAssetUrl } from '../lib/format';
 import { recordContainerLend, resolveProfileUserIdForPosName, validateBorrowContainers } from '../lib/containerLend';
-import { loadPosCustomerNames, type PosCustomerOption } from '../lib/posCustomerNames';
+import { customerNameKey, loadPosCustomerNames, savePosWalkInCustomer, type PosCustomerOption } from '../lib/posCustomerNames';
 import { isLowStock, stockLabel, tracksStock } from '../lib/inventoryStock';
 import { type PosPaymentMethod } from '../lib/posPayment';
 import { supabase } from '../lib/supabase';
@@ -34,10 +35,10 @@ function productMatchesCategory(p: ProductRow, cat: PosCategory): boolean {
   return cat === 'water' ? p.category === 'water' : p.category === 'other';
 }
 
-const POS_CATEGORIES: { id: PosCategory; label: string; icon?: string }[] = [
+const POS_CATEGORIES: { id: PosCategory; label: string }[] = [
   { id: 'all', label: 'All' },
-  { id: 'water', label: 'Water', icon: '💧' },
-  { id: 'others', label: 'Others', icon: '📦' },
+  { id: 'water', label: 'Water' },
+  { id: 'others', label: 'Others' },
 ];
 
 const POS_PAYMENT_METHODS: { id: PosPaymentMethod; label: string; icon: 'cash' | 'gcash' }[] = [
@@ -62,6 +63,7 @@ export function PosPage() {
   const [borrowContainers, setBorrowContainers] = useState(false);
   const [borrowQty, setBorrowQty] = useState('1');
   const [borrowCodes, setBorrowCodes] = useState('');
+  const lastSavedCustomerKey = useRef('');
 
   const loadProducts = useCallback(async () => {
     if (!businessId) return;
@@ -174,11 +176,30 @@ export function PosPage() {
     setCart([]);
     setCashReceived('');
     setCustomerName('');
+    lastSavedCustomerKey.current = '';
     setPaymentMethod('cash');
     setBorrowContainers(false);
     setBorrowQty('1');
     setBorrowCodes('');
     setSuccess(null);
+  }
+
+  async function rememberCustomerName(rawName: string) {
+    if (!businessId) return;
+    const displayName = rawName.trim().replace(/\s+/g, ' ');
+    const key = customerNameKey(displayName);
+    if (key.length < 2 || lastSavedCustomerKey.current === key) return;
+    const alreadyListed = customerNameOptions.some((option) => customerNameKey(option.name) === key);
+    const saved = await savePosWalkInCustomer(businessId, displayName);
+    if (!saved.ok) {
+      setError(saved.message ?? 'Could not add this customer.');
+      return;
+    }
+    lastSavedCustomerKey.current = key;
+    if (alreadyListed) return;
+    setError(null);
+    setSuccess(`${displayName} was added to the customer list.`);
+    await loadCustomerNames();
   }
 
   async function submitSale(paymentSettled: boolean) {
@@ -219,7 +240,11 @@ export function PosPage() {
     setError(null);
     setSuccess(null);
     try {
-      const trimmedName = customerName.trim();
+      const trimmedName = customerName.trim().replace(/\s+/g, ' ');
+      if (trimmedName) {
+        const saved = await savePosWalkInCustomer(businessId, trimmedName);
+        if (saved.ok) lastSavedCustomerKey.current = customerNameKey(trimmedName);
+      }
       const cashValue =
         paymentMethod === 'cash' && Number.isFinite(cashNum) ? cashNum : paymentSettled ? cartTotal : null;
       const changeDue =
@@ -330,7 +355,7 @@ export function PosPage() {
                   className={`pos-category-tab${category === c.id ? ' active' : ''}`}
                   onClick={() => setCategory(c.id)}
                 >
-                  {c.icon ? <span aria-hidden>{c.icon}</span> : null}
+                  {c.id === 'water' ? <DropIcon /> : c.id === 'others' ? <BoxIcon /> : null}
                   {c.label}
                 </button>
               ))}
@@ -441,10 +466,11 @@ export function PosPage() {
             <CustomerNameAutocomplete
               value={customerName}
               onChange={setCustomerName}
+              onCommit={(name) => void rememberCustomerName(name)}
               options={customerNameOptions}
               hint={
                 <p className="field-hint pos-customer-hint">
-                  Required for unpaid orders. Start typing to pick an existing customer.
+                  Tap a suggestion to use that customer. If you do not tap one, the name you typed is a new customer. The same exact name is not added twice.
                 </p>
               }
             />

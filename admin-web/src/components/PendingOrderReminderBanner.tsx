@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom';
 
+import { AlertIcon } from './UiIcons';
 import type { StalePendingOrder } from '../lib/pendingOrderReminder';
 
 type Props = {
@@ -30,7 +31,7 @@ export function PendingOrderReminderBanner({ orders, onDismiss }: Props) {
     <div className="pending-order-reminder-banner" role="alert">
       <div className="pending-order-reminder-banner-inner">
         <span className="pending-order-reminder-icon" aria-hidden>
-          ⚠
+          <AlertIcon />
         </span>
         <div className="pending-order-reminder-copy">
           <strong>Pending order reminder</strong>

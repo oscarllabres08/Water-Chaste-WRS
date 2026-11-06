@@ -325,9 +325,9 @@ export default function OrdersScreen() {
                   width: 32,
                   height: 32,
                   borderRadius: 12,
-                  backgroundColor: 'rgba(18,101,214,0.08)',
+                  backgroundColor: 'rgba(0,114,240,0.08)',
                   borderWidth: 1,
-                  borderColor: 'rgba(18,101,214,0.12)',
+                  borderColor: 'rgba(0,114,240,0.12)',
                   alignItems: 'center',
                   justifyContent: 'center',
                 }}
@@ -349,9 +349,9 @@ export default function OrdersScreen() {
                 flexWrap: 'nowrap',
                 padding: 4,
                 borderRadius: 14,
-                backgroundColor: '#EAF2FF',
+                backgroundColor: '#E5F3FC',
                 borderWidth: 1,
-                borderColor: 'rgba(18,101,214,0.10)',
+                borderColor: 'rgba(0,114,240,0.10)',
                 gap: 4,
               }}
             >
@@ -367,9 +367,9 @@ export default function OrdersScreen() {
                   paddingVertical: 10,
                   paddingHorizontal: 4,
                   borderRadius: 11,
-                  backgroundColor: sortNearestFirst ? 'rgba(18,101,214,0.18)' : 'transparent',
+                  backgroundColor: sortNearestFirst ? 'rgba(0,114,240,0.18)' : 'transparent',
                   borderWidth: sortNearestFirst ? 1 : 0,
-                  borderColor: sortNearestFirst ? 'rgba(18,101,214,0.28)' : 'transparent',
+                  borderColor: sortNearestFirst ? 'rgba(0,114,240,0.28)' : 'transparent',
                 }}
               >
                 <Ionicons
@@ -399,9 +399,9 @@ export default function OrdersScreen() {
                   paddingVertical: 10,
                   paddingHorizontal: 4,
                   borderRadius: 11,
-                  backgroundColor: !sortNearestFirst ? 'rgba(18,101,214,0.18)' : 'transparent',
+                  backgroundColor: !sortNearestFirst ? 'rgba(0,114,240,0.18)' : 'transparent',
                   borderWidth: !sortNearestFirst ? 1 : 0,
-                  borderColor: !sortNearestFirst ? 'rgba(18,101,214,0.28)' : 'transparent',
+                  borderColor: !sortNearestFirst ? 'rgba(0,114,240,0.28)' : 'transparent',
                 }}
               >
                 <Ionicons
@@ -562,8 +562,8 @@ function paymentBadgeStyle(tone: 'paid' | 'gcash' | 'unpaid') {
   }
   if (tone === 'gcash') {
     return {
-      backgroundColor: 'rgba(18,101,214,0.10)',
-      borderColor: 'rgba(18,101,214,0.22)',
+      backgroundColor: 'rgba(0,114,240,0.10)',
+      borderColor: 'rgba(0,114,240,0.22)',
       color: theme.colors.primary,
       icon: 'wallet-outline' as const,
     };

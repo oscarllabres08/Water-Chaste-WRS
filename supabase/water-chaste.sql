@@ -1,4 +1,10 @@
-  -- Aquabeast WRS (Supabase/Postgres) schema
+-- WRS Water Chaste
+-- Run this whole file once in the Supabase SQL Editor (project hjvwwxdyyugjchkeolyp).
+-- Fresh database only. Water refilling station: customers, rider/staff, admin, POS, inventory, loyalty, expenses, containers, and push notifications.
+-- Laundry and the old password-reset mailer are not included.
+
+
+  -- Water Chaste schema
   -- Run this in Supabase SQL Editor.
 
   -- Extensions
@@ -1715,7 +1721,7 @@
   create table if not exists public.business_expenses (
     id uuid primary key default gen_random_uuid(),
     seller_id uuid not null references public.profiles(user_id) on delete cascade,
-    business_unit text not null default 'wrs' check (business_unit in ('wrs', 'laundry')),
+    business_unit text not null default 'wrs' check (business_unit in ('wrs')),
     expense_type public.business_expense_type not null,
     others_label text,
     amount numeric(12, 2) not null check (amount > 0),
@@ -1726,7 +1732,7 @@
 
   alter table public.business_expenses
     add column if not exists business_unit text not null default 'wrs'
-    check (business_unit in ('wrs', 'laundry'));
+    check (business_unit in ('wrs'));
 
   create index if not exists business_expenses_seller_date_idx
     on public.business_expenses (seller_id, expense_date desc);
@@ -2580,27 +2586,6 @@
   grant execute on function public.seller_record_container_return(uuid, integer, uuid, text) to authenticated;
   grant execute on function public.seller_record_container_return(uuid, integer, uuid, text) to service_role;
 
-  -- ── Password reset codes (for PHPMailer reset flow) ---
-  create table if not exists public.password_reset_codes (
-    id uuid primary key default gen_random_uuid(),
-    user_id uuid not null,
-    email text not null,
-    code_hash text not null,
-    expires_at timestamptz not null,
-    used_at timestamptz,
-    created_at timestamptz not null default now()
-  );
-
-  create index if not exists password_reset_codes_email_created_idx
-    on public.password_reset_codes (email, created_at desc);
-
-  create index if not exists password_reset_codes_user_created_idx
-    on public.password_reset_codes (user_id, created_at desc);
-
-  alter table public.password_reset_codes enable row level security;
-
-  -- No RLS policies: table is intended for server/service_role access only.
-
   -- Realtime (postgres_changes): add tables to the Supabase publication when present.
   -- Safe to re-run: ignores errors (already added, publication missing outside Supabase, etc.).
   do $realtime$ begin
@@ -2626,3 +2611,1723 @@
     end;
   end $realtime$;
 
+
+
+-- Supabase Storage setup for Water Chaste
+-- Storage buckets and policies.
+--
+-- Creates bucket `wrs-assets` and Storage policies for seller uploads.
+--
+-- Used paths (by app):
+-- - Store logo:   <seller_id>/logo/<timestamp>.<ext>
+-- - Product img:  <seller_id>/product/<timestamp>.<ext>
+-- - Ewallet QR:   <seller_id>/qr/<timestamp>.<ext>
+
+-- 1) Bucket
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'wrs-assets',
+  'wrs-assets',
+  true,
+  10485760, -- 10MB
+  array['image/jpeg','image/png','image/webp']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+-- 2) Policies (Storage RLS)
+-- NOTE: storage.objects uses RLS; policies are required for read/write.
+
+-- Read: allow public read for this bucket (since bucket is public)
+drop policy if exists "public read wrs-assets" on storage.objects;
+create policy "public read wrs-assets"
+on storage.objects for select
+using (bucket_id = 'wrs-assets');
+
+-- Insert: authenticated sellers upload under their workspace root folder (owner id = seller_business_id).
+drop policy if exists "seller upload own wrs-assets" on storage.objects;
+create policy "seller upload own wrs-assets"
+on storage.objects for insert
+with check (
+  bucket_id = 'wrs-assets'
+  and auth.uid() is not null
+  and public.is_seller(auth.uid())
+  and public.seller_business_id(auth.uid()) is not null
+  and (storage.foldername(name))[1] = public.seller_business_id(auth.uid())::text
+);
+
+-- Update: same workspace folder as seller_business_id(auth.uid())
+drop policy if exists "seller update own wrs-assets" on storage.objects;
+create policy "seller update own wrs-assets"
+on storage.objects for update
+using (
+  bucket_id = 'wrs-assets'
+  and auth.uid() is not null
+  and public.is_seller(auth.uid())
+  and public.seller_business_id(auth.uid()) is not null
+  and (storage.foldername(name))[1] = public.seller_business_id(auth.uid())::text
+)
+with check (
+  bucket_id = 'wrs-assets'
+  and auth.uid() is not null
+  and public.is_seller(auth.uid())
+  and public.seller_business_id(auth.uid()) is not null
+  and (storage.foldername(name))[1] = public.seller_business_id(auth.uid())::text
+);
+
+-- Delete: same workspace folder
+drop policy if exists "seller delete own wrs-assets" on storage.objects;
+create policy "seller delete own wrs-assets"
+on storage.objects for delete
+using (
+  bucket_id = 'wrs-assets'
+  and auth.uid() is not null
+  and public.is_seller(auth.uid())
+  and public.seller_business_id(auth.uid()) is not null
+  and (storage.foldername(name))[1] = public.seller_business_id(auth.uid())::text
+);
+
+
+
+-- Optional bucket for small files only.
+-- Supabase FREE plan: max 50 MB per upload — our APKs (~93 MB) do NOT fit.
+-- Download site uses EAS artifact URLs instead (see download-site/README.md).
+-- Run in Supabase Dashboard → SQL Editor only if you upgrade plan or use smaller builds.
+
+insert into storage.buckets (id, name, public, file_size_limit, allowed_mime_types)
+values (
+  'wrs-apks',
+  'wrs-apks',
+  true,
+  104857600,
+  array['application/vnd.android.package-archive', 'application/octet-stream']
+)
+on conflict (id) do update
+set public = excluded.public,
+    file_size_limit = excluded.file_size_limit,
+    allowed_mime_types = excluded.allowed_mime_types;
+
+drop policy if exists "public read wrs-apks" on storage.objects;
+create policy "public read wrs-apks"
+on storage.objects for select
+using (bucket_id = 'wrs-apks');
+
+
+-- Stock quantity for non–water-refill products (Others). Water refills use null = unlimited.
+
+alter table public.products
+  add column if not exists stock_quantity integer
+  check (stock_quantity is null or stock_quantity >= 0);
+
+create or replace function public.decrement_product_stock(p_product_id uuid, p_quantity integer)
+returns void
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if p_quantity is null or p_quantity < 1 then
+    return;
+  end if;
+  update public.products
+  set
+    stock_quantity = greatest(0, stock_quantity - p_quantity),
+    updated_at = now()
+  where id = p_product_id
+    and category = 'other'
+    and stock_quantity is not null
+    and seller_id = public.seller_business_id(auth.uid());
+end;
+$$;
+
+revoke all on function public.decrement_product_stock(uuid, integer) from public;
+grant execute on function public.decrement_product_stock(uuid, integer) to authenticated;
+grant execute on function public.decrement_product_stock(uuid, integer) to service_role;
+
+
+-- Delivery fee snapshot on orders (customer app: ≤500 m free, 501+ = ₱5 per water container).
+
+alter table public.orders add column if not exists delivery_fee numeric(12,2) not null default 0
+  check (delivery_fee >= 0);
+
+alter table public.orders add column if not exists delivery_distance_meters double precision;
+
+
+-- Run in Supabase SQL Editor to enable "Send test notification" in seller app settings.
+
+create or replace function public.seller_send_test_notification()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_id uuid;
+begin
+  if not public.is_seller(v_uid) then
+    return jsonb_build_object('ok', false, 'message', 'Only sellers can run this test.');
+  end if;
+
+  insert into public.notifications (recipient_id, order_id, kind, title, body, data)
+  values (
+    v_uid,
+    null,
+    'test_notification',
+    'Test notification',
+    'Kung nakita mo ito, gumagana ang seller alerts. (Test mula sa Notification settings.)',
+    jsonb_build_object('app', 'seller', 'kind', 'test_notification', 'source', 'seller_send_test_notification')
+  )
+  returning id into v_id;
+
+  return jsonb_build_object('ok', true, 'notification_id', v_id);
+end;
+$$;
+
+grant execute on function public.seller_send_test_notification() to authenticated;
+grant execute on function public.seller_send_test_notification() to service_role;
+
+
+-- Run in Supabase SQL Editor. Lets seller app show if background FCM can work.
+
+create or replace function public.seller_push_status()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_has_token boolean;
+  v_url text;
+  v_secret text;
+  v_jwt text;
+  v_server_ok boolean;
+begin
+  if not public.is_seller(v_uid) then
+    return jsonb_build_object('ok', false, 'message', 'Only sellers can view push status.');
+  end if;
+
+  select exists(
+    select 1
+    from public.push_tokens
+    where user_id = v_uid
+      and app = 'seller'
+      and platform = 'android'
+      and nullif(trim(token), '') is not null
+  ) into v_has_token;
+
+  select value into v_url from public.system_settings where key = 'push_webhook_url';
+  select value into v_secret from public.system_settings where key = 'push_webhook_secret';
+  select value into v_jwt from public.system_settings where key = 'push_function_jwt';
+
+  v_server_ok := coalesce(v_url, '') not like 'CONFIGURE_%'
+    and nullif(trim(coalesce(v_url, '')), '') is not null
+    and coalesce(v_secret, '') not like 'CONFIGURE_%'
+    and nullif(trim(coalesce(v_secret, '')), '') is not null
+    and coalesce(v_jwt, '') not like 'CONFIGURE_%'
+    and nullif(trim(coalesce(v_jwt, '')), '') is not null;
+
+  return jsonb_build_object(
+    'ok', true,
+    'device_token_registered', v_has_token,
+    'server_push_configured', v_server_ok,
+    'background_push_ready', v_has_token and v_server_ok
+  );
+end;
+$$;
+
+grant execute on function public.seller_push_status() to authenticated;
+grant execute on function public.seller_push_status() to service_role;
+
+
+-- Store owner toggles loyalty promo on/off (admin web). Run in Supabase SQL Editor.
+
+alter table public.profiles
+  add column if not exists loyalty_points_active boolean not null default false;
+
+create or replace function public.apply_order_loyalty_on_delivered()
+returns trigger
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_pts int;
+  v_body text;
+  v_loyalty_on boolean;
+begin
+  if new.status is distinct from 'delivered' then
+    return new;
+  end if;
+  if old.status = 'delivered' then
+    return new;
+  end if;
+  if lower(coalesce(new.payment_method, '')) = 'utang' then
+    return new;
+  end if;
+  if exists (select 1 from public.order_loyalty_awards ola where ola.order_id = new.id) then
+    return new;
+  end if;
+
+  select coalesce(p.loyalty_points_active, false) into v_loyalty_on
+  from public.profiles p
+  where p.user_id = new.seller_id;
+
+  if not v_loyalty_on then
+    return new;
+  end if;
+
+  select coalesce(sum(oi.quantity), 0)::int into v_pts
+  from public.order_items oi
+  join public.products pr on pr.id = oi.product_id
+  where oi.order_id = new.id
+    and pr.earn_loyalty_points = true;
+
+  if v_pts <= 0 then
+    return new;
+  end if;
+
+  insert into public.order_loyalty_awards (order_id, customer_id, seller_id, points_awarded)
+  values (new.id, new.customer_id, new.seller_id, v_pts);
+
+  if v_pts > 0 then
+    insert into public.loyalty_balances (customer_id, seller_id, points_balance, updated_at)
+    values (new.customer_id, new.seller_id, v_pts, now())
+    on conflict (customer_id, seller_id) do update
+    set
+      points_balance = public.loyalty_balances.points_balance + v_pts,
+      updated_at = now();
+
+    if v_pts = 1 then
+      v_body := 'You earned 1 loyalty point for eligible items in your delivered order. Online orders only — not walk-in POS.';
+    else
+      v_body := 'You earned ' || v_pts::text
+        || ' loyalty points for eligible items in your delivered order. Online orders only — not walk-in POS.';
+    end if;
+
+    insert into public.notifications (recipient_id, order_id, kind, title, body, data)
+    values (
+      new.customer_id,
+      new.id,
+      'loyalty_points',
+      'You earned loyalty points',
+      v_body,
+      jsonb_build_object('points', v_pts, 'orderId', new.id, 'app', 'customer')
+    );
+  end if;
+
+  return new;
+end;
+$$;
+
+create or replace function public.customer_redeem_loyalty_voucher(p_seller_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_n int;
+  v_code text;
+  v_id uuid;
+  v_exp timestamptz := now() + interval '3 days';
+  v_attempt int;
+  v_loyalty_on boolean;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated';
+  end if;
+  if not exists (select 1 from public.profiles p where p.user_id = v_uid and p.role = 'customer') then
+    raise exception 'Only customers can redeem loyalty rewards';
+  end if;
+
+  select coalesce(p.loyalty_points_active, false) into v_loyalty_on
+  from public.profiles p
+  where p.user_id = p_seller_id;
+
+  if not v_loyalty_on then
+    return jsonb_build_object('ok', false, 'error', 'loyalty_inactive');
+  end if;
+
+  update public.loyalty_balances lb
+  set
+    points_balance = lb.points_balance - 10,
+    updated_at = now()
+  where lb.customer_id = v_uid
+    and lb.seller_id = p_seller_id
+    and lb.points_balance >= 10;
+  get diagnostics v_n = row_count;
+
+  if v_n = 0 then
+    return jsonb_build_object('ok', false, 'error', 'insufficient_points');
+  end if;
+
+  v_attempt := 0;
+  loop
+    v_attempt := v_attempt + 1;
+    if v_attempt > 8 then
+      update public.loyalty_balances lb
+      set points_balance = lb.points_balance + 10, updated_at = now()
+      where lb.customer_id = v_uid and lb.seller_id = p_seller_id;
+      raise exception 'Could not generate a unique voucher code';
+    end if;
+    v_code := 'REF-' || upper(substr(replace(gen_random_uuid()::text, '-', ''), 1, 6));
+
+    begin
+      insert into public.loyalty_vouchers (
+        customer_id,
+        seller_id,
+        code,
+        status,
+        points_spent,
+        expires_at
+      )
+      values (
+        v_uid,
+        p_seller_id,
+        v_code,
+        'active',
+        10,
+        v_exp
+      )
+      returning id into v_id;
+      exit;
+    exception when unique_violation then
+      null;
+    end;
+  end loop;
+
+  return jsonb_build_object(
+    'ok', true,
+    'voucher_id', v_id,
+    'code', v_code,
+    'expires_at', v_exp,
+    'note', 'Show this code at the store for 1 free container refill. Valid for 3 days — redeem only when you are ready to refill.'
+  );
+end;
+$$;
+
+
+-- Seller app download PIN (admin Settings + download site). Run in Supabase SQL Editor.
+
+alter table public.profiles
+  add column if not exists seller_download_pin text;
+
+comment on column public.profiles.seller_download_pin is
+  'PIN required on the public download site to unlock seller-app.apk. Set by store owner in admin Settings.';
+
+create or replace function public.set_seller_download_pin(p_new_pin text)
+returns void
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_pin text := trim(coalesce(p_new_pin, ''));
+begin
+  if v_owner is null then
+    raise exception 'Not authenticated';
+  end if;
+  if not public.is_seller(v_owner) then
+    raise exception 'Only sellers can set the download PIN';
+  end if;
+  if v_owner is distinct from public.seller_business_id(v_owner) then
+    raise exception 'Only the store owner can set the download PIN';
+  end if;
+  if char_length(v_pin) < 4 then
+    raise exception 'PIN must be at least 4 characters';
+  end if;
+  if char_length(v_pin) > 32 then
+    raise exception 'PIN must be at most 32 characters';
+  end if;
+
+  update public.profiles
+  set seller_download_pin = v_pin
+  where user_id = v_owner
+    and role = 'seller'::public.user_role
+    and coalesce(seller_team_role, 'owner') = 'owner';
+
+  if not found then
+    raise exception 'Could not save PIN. Log in as the store owner (master admin) and try again.';
+  end if;
+end;
+$$;
+
+revoke all on function public.set_seller_download_pin(text) from public;
+grant execute on function public.set_seller_download_pin(text) to authenticated;
+grant execute on function public.set_seller_download_pin(text) to service_role;
+
+drop function if exists public.verify_seller_download_pin(text, text, uuid);
+
+create or replace function public.verify_seller_download_pin(p_pin text)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_entered text := trim(coalesce(p_pin, ''));
+  v_stored text;
+begin
+  if v_entered = '' then
+    return false;
+  end if;
+
+  -- Single-store download site: use the master admin (store owner) PIN from Settings.
+  select p.seller_download_pin into v_stored
+  from public.profiles p
+  where p.role = 'seller'::public.user_role
+    and coalesce(p.seller_join_status, 'approved') = 'approved'
+    and coalesce(p.seller_team_role, 'owner') = 'owner'
+    and p.seller_download_pin is not null
+    and trim(p.seller_download_pin) <> ''
+  order by p.updated_at desc nulls last
+  limit 1;
+
+  if v_stored is null or trim(v_stored) = '' then
+    return false;
+  end if;
+
+  return trim(v_stored) = v_entered;
+end;
+$$;
+
+revoke all on function public.verify_seller_download_pin(text) from public;
+grant execute on function public.verify_seller_download_pin(text) to anon;
+grant execute on function public.verify_seller_download_pin(text) to authenticated;
+grant execute on function public.verify_seller_download_pin(text) to service_role;
+
+
+-- 30-minute pending order reminder (seller app + admin web).
+-- Client calls request_pending_order_reminder(order_id) when a pending online order
+-- is 30+ minutes old and not yet opened in order details.
+
+create or replace function public.request_pending_order_reminder(p_order_id uuid)
+returns boolean
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_order public.orders%rowtype;
+  v_uid uuid := auth.uid();
+  v_body text;
+begin
+  if v_uid is null then
+    return false;
+  end if;
+
+  select * into v_order from public.orders where id = p_order_id;
+  if not found or v_order.status <> 'pending' then
+    return false;
+  end if;
+
+  if v_order.created_at > now() - interval '30 minutes' then
+    return false;
+  end if;
+
+  if v_uid <> v_order.seller_id and not exists (
+    select 1
+    from public.profiles p
+    where p.user_id = v_uid
+      and p.seller_workspace_owner_id = v_order.seller_id
+      and p.seller_join_status = 'approved'
+  ) then
+    return false;
+  end if;
+
+  -- Allow a new reminder every 30 minutes (matches banner snooze / re-popup).
+  if exists (
+    select 1
+    from public.notifications n
+    where n.order_id = p_order_id
+      and n.kind = 'pending_order_reminder'
+      and n.recipient_id = v_uid
+      and n.created_at > now() - interval '30 minutes'
+  ) then
+    return false;
+  end if;
+
+  v_body := coalesce(v_order.customer_name, 'A customer')
+    || '''s order is still pending and has not been opened for over 30 minutes.';
+
+  insert into public.notifications(recipient_id, order_id, kind, title, body, data)
+  values (
+    v_uid,
+    p_order_id,
+    'pending_order_reminder',
+    'Pending order reminder',
+    v_body,
+    jsonb_build_object(
+      'orderId', p_order_id,
+      'kind', 'pending_order_reminder',
+      'customerName', v_order.customer_name
+    )
+  );
+
+  return true;
+end;
+$$;
+
+grant execute on function public.request_pending_order_reminder(uuid) to authenticated;
+grant execute on function public.request_pending_order_reminder(uuid) to service_role;
+
+
+-- Staff registration: single-store WRS flow (no store code).
+-- Run in Supabase SQL Editor (safe to re-run).
+
+-- Remove ALL overloaded register_pending_seller versions (fixes "Could not choose the best candidate function").
+drop function if exists public.register_pending_seller(text);
+drop function if exists public.register_pending_seller(text, text);
+drop function if exists public.register_pending_seller(text, text, text);
+drop function if exists public.register_pending_seller(text, text, boolean);
+
+create or replace function public.owner_list_workspace_staff()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_business uuid := public.seller_business_id(v_owner);
+begin
+  if v_owner is null then
+    raise exception 'Not authenticated';
+  end if;
+  if v_business is null or v_business is distinct from v_owner then
+    raise exception 'Only the store administrator can view staff';
+  end if;
+
+  return coalesce(
+    (
+      select jsonb_agg(
+        jsonb_build_object(
+          'user_id', p.user_id,
+          'display_name', p.display_name,
+          'phone', p.phone,
+          'email', u.email,
+          'seller_join_status', p.seller_join_status,
+          'created_at', p.created_at
+        )
+        order by p.created_at desc
+      )
+      from public.profiles p
+      left join auth.users u on u.id = p.user_id
+      where p.seller_workspace_owner_id = v_owner
+        and p.seller_team_role = 'staff'
+    ),
+    '[]'::jsonb
+  );
+end;
+$$;
+
+revoke all on function public.owner_list_workspace_staff() from public;
+grant execute on function public.owner_list_workspace_staff() to authenticated;
+grant execute on function public.owner_list_workspace_staff() to service_role;
+
+create or replace function public.register_pending_seller(
+  p_display_name text default null,
+  p_phone text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_owner uuid;
+  v_email text;
+  v_name text;
+  v_role public.user_role;
+  v_team text;
+  v_status text;
+  v_n int;
+begin
+  if v_uid is null then
+    raise exception 'Not authenticated';
+  end if;
+
+  perform set_config('app.register_pending_seller', '1', true);
+
+  begin
+    select email into v_email from auth.users where id = v_uid;
+  exception
+    when others then
+      v_email := null;
+  end;
+
+  select p.role, p.seller_team_role, p.seller_join_status, p.display_name
+  into v_role, v_team, v_status, v_name
+  from public.profiles p
+  where p.user_id = v_uid;
+
+  if not found then
+    insert into public.profiles(user_id, role, display_name, phone)
+    values (
+      v_uid,
+      'customer',
+      coalesce(nullif(trim(p_display_name), ''), split_part(coalesce(v_email, ''), '@', 1)),
+      nullif(trim(p_phone), '')
+    )
+    on conflict (user_id) do nothing;
+
+    select p.role, p.seller_team_role, p.seller_join_status, p.display_name
+    into v_role, v_team, v_status, v_name
+    from public.profiles p
+    where p.user_id = v_uid;
+
+    if not found then
+      raise exception 'PROFILE_MISSING: Could not create profile row for this account.';
+    end if;
+  end if;
+
+  if v_role = 'seller' and v_team = 'staff' and v_status = 'pending' then
+    return jsonb_build_object('ok', true, 'already', 'pending');
+  end if;
+
+  if v_role = 'seller' and v_team = 'staff' and v_status = 'approved' then
+    raise exception 'REGISTRATION_ALREADY_APPROVED: Your account is already active.';
+  end if;
+
+  if v_role = 'seller' and v_team = 'owner' then
+    return jsonb_build_object('ok', true, 'owner', true, 'approved', true);
+  end if;
+
+  if v_role = 'seller' and (v_team is null or length(trim(coalesce(v_team, ''))) = 0) then
+    v_team := 'owner';
+    v_status := 'approved';
+  end if;
+
+  if not (
+    v_role = 'customer'
+    or (v_role = 'seller' and v_team = 'staff' and v_status = 'rejected')
+    or (v_role = 'seller' and v_team = 'owner')
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'REGISTRATION_STATE_INVALID', 'message', 'Account state is invalid. Contact support.');
+  end if;
+
+  -- Single WRS store: use the first registered approved owner.
+  select o.user_id
+  into v_owner
+  from public.profiles o
+  where o.role = 'seller'
+    and o.seller_team_role = 'owner'
+    and coalesce(o.seller_join_status, 'approved') = 'approved'
+  order by o.created_at asc
+  limit 1;
+
+  if v_owner is null then
+    v_name := coalesce(nullif(trim(p_display_name), ''), nullif(trim(coalesce(v_name, '')), ''), split_part(coalesce(v_email, ''), '@', 1));
+
+    update public.profiles p
+    set
+      role = 'seller',
+      seller_team_role = 'owner',
+      seller_join_status = 'approved',
+      seller_workspace_owner_id = v_uid,
+      display_name = coalesce(nullif(trim(p_display_name), ''), p.display_name),
+      phone = coalesce(nullif(trim(p_phone), ''), p.phone)
+    where p.user_id = v_uid;
+
+    get diagnostics v_n = row_count;
+    if v_n <> 1 then
+      raise exception 'PROFILE_UPDATE_FAILED: Could not update your profile.';
+    end if;
+
+    return jsonb_build_object('ok', true, 'owner', true, 'approved', true, 'first_owner', true);
+  end if;
+
+  v_name := coalesce(nullif(trim(p_display_name), ''), nullif(trim(coalesce(v_name, '')), ''), split_part(coalesce(v_email, ''), '@', 1));
+
+  update public.profiles p
+  set
+    role = 'seller',
+    seller_team_role = 'staff',
+    seller_join_status = 'pending',
+    seller_workspace_owner_id = v_owner,
+    display_name = coalesce(nullif(trim(p_display_name), ''), p.display_name),
+    phone = coalesce(nullif(trim(p_phone), ''), p.phone)
+  where p.user_id = v_uid;
+
+  get diagnostics v_n = row_count;
+  if v_n <> 1 then
+    raise exception 'PROFILE_UPDATE_FAILED: Could not update your profile.';
+  end if;
+
+  insert into public.notifications (recipient_id, order_id, kind, title, body, data)
+  values (
+    v_owner,
+    null,
+    'seller_registration_pending',
+    'New staff registration',
+    coalesce(v_name, 'Someone') || ' registered in the Seller app and needs approval.'
+      || case when v_email is not null and length(trim(v_email)) > 0 then ' · ' || v_email else '' end,
+    jsonb_build_object('pending_user_id', v_uid, 'kind', 'seller_registration_pending', 'app', 'admin')
+  );
+
+  return jsonb_build_object('ok', true, 'pending', true);
+end;
+$$;
+
+revoke all on function public.register_pending_seller(text, text) from public;
+grant execute on function public.register_pending_seller(text, text) to authenticated;
+grant execute on function public.register_pending_seller(text, text) to service_role;
+
+-- Reject = delete staff account (hard delete when possible).
+create or replace function public.owner_set_staff_join_status(p_staff_user_id uuid, p_status text)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_business uuid := public.seller_business_id(v_owner);
+  v_rows int;
+  v_status text := lower(trim(p_status));
+begin
+  if v_owner is null then
+    raise exception 'Not authenticated';
+  end if;
+  if v_business is null or v_business is distinct from v_owner then
+    raise exception 'Only the store administrator can approve or reject staff';
+  end if;
+  if p_staff_user_id is null then
+    raise exception 'Missing staff user id';
+  end if;
+  if p_staff_user_id = v_owner then
+    raise exception 'Cannot change approval for the owner account';
+  end if;
+  if v_status not in ('approved', 'rejected') then
+    raise exception 'Invalid status';
+  end if;
+
+  if v_status = 'rejected' then
+    return public.owner_delete_staff_account(p_staff_user_id);
+  end if;
+
+  update public.profiles p
+  set seller_join_status = 'approved'
+  where p.user_id = p_staff_user_id
+    and p.role = 'seller'
+    and p.seller_team_role = 'staff'
+    and p.seller_workspace_owner_id = v_owner;
+
+  get diagnostics v_rows = row_count;
+  if v_rows <> 1 then
+    raise exception 'Staff member not found or not in your workspace';
+  end if;
+
+  return jsonb_build_object('ok', true, 'status', 'approved');
+end;
+$$;
+
+revoke all on function public.owner_set_staff_join_status(uuid, text) from public;
+grant execute on function public.owner_set_staff_join_status(uuid, text) to authenticated;
+grant execute on function public.owner_set_staff_join_status(uuid, text) to service_role;
+
+-- Allow deleting pending staff (not only approved).
+create or replace function public.owner_delete_staff_account(p_staff_user_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_business uuid := public.seller_business_id(v_owner);
+  v_ok boolean;
+  v_rows int;
+begin
+  if v_owner is null then
+    raise exception 'Not authenticated';
+  end if;
+  if v_business is null or v_business <> v_owner then
+    raise exception 'Only the store administrator can remove accounts';
+  end if;
+  if p_staff_user_id is null then
+    raise exception 'Missing staff user id';
+  end if;
+  if p_staff_user_id = v_owner then
+    raise exception 'Cannot delete the owner account';
+  end if;
+
+  if not exists (
+    select 1
+    from public.profiles p
+    where p.user_id = p_staff_user_id
+      and p.role = 'seller'
+      and p.seller_team_role = 'staff'
+      and p.seller_workspace_owner_id = v_owner
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'NOT_IN_WORKSPACE', 'message', 'Account not found in your workspace.');
+  end if;
+
+  begin
+    delete from public.profiles where user_id = p_staff_user_id;
+    delete from auth.users where id = p_staff_user_id;
+    return jsonb_build_object('ok', true, 'deleted', true);
+  exception
+    when others then
+      update public.profiles
+      set
+        seller_join_status = 'rejected',
+        seller_workspace_owner_id = null,
+        role = 'customer',
+        seller_team_role = null
+      where user_id = p_staff_user_id;
+      get diagnostics v_rows = row_count;
+      v_ok := (v_rows = 1);
+      return jsonb_build_object(
+        'ok', true,
+        'deleted', false,
+        'disabled', v_ok,
+        'message', 'Account has history and cannot be deleted. Access removed instead.'
+      );
+  end;
+end;
+$$;
+
+revoke all on function public.owner_delete_staff_account(uuid) from public;
+grant execute on function public.owner_delete_staff_account(uuid) to authenticated;
+grant execute on function public.owner_delete_staff_account(uuid) to service_role;
+
+
+-- Walk-in POS borrowed containers (by customer name) + lend for registered customers without an online order.
+-- Run in Supabase SQL Editor after fix-container-return-overload.sql.
+
+create table if not exists public.seller_pos_container_balance (
+  seller_id uuid not null references public.profiles(user_id) on delete cascade,
+  customer_name_key text not null,
+  display_name text,
+  outstanding_count integer not null default 0 check (outstanding_count >= 0),
+  identifier_notes text,
+  updated_at timestamptz not null default now(),
+  primary key (seller_id, customer_name_key)
+);
+
+create index if not exists seller_pos_container_balance_seller_idx
+  on public.seller_pos_container_balance (seller_id);
+
+create table if not exists public.seller_pos_container_movements (
+  id uuid primary key default gen_random_uuid(),
+  seller_id uuid not null references public.profiles(user_id) on delete cascade,
+  customer_name_key text not null,
+  pos_sale_id uuid references public.pos_sales(id) on delete set null,
+  movement_type text not null check (movement_type in ('lend', 'return')),
+  quantity integer not null check (quantity > 0),
+  container_numbers text,
+  created_at timestamptz not null default now()
+);
+
+create index if not exists seller_pos_container_movements_lookup_idx
+  on public.seller_pos_container_movements (seller_id, customer_name_key, created_at desc);
+
+alter table public.seller_pos_container_balance enable row level security;
+alter table public.seller_pos_container_movements enable row level security;
+
+drop policy if exists "seller_pos_container_balance seller read" on public.seller_pos_container_balance;
+create policy "seller_pos_container_balance seller read"
+  on public.seller_pos_container_balance for select
+  using (
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
+  );
+
+drop policy if exists "seller_pos_container_movements seller read" on public.seller_pos_container_movements;
+create policy "seller_pos_container_movements seller read"
+  on public.seller_pos_container_movements for select
+  using (
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
+  );
+
+revoke insert, update, delete on public.seller_pos_container_balance from authenticated;
+revoke insert, update, delete on public.seller_pos_container_movements from authenticated;
+
+create or replace function public.normalize_pos_customer_name_key(p_name text)
+returns text
+language sql
+immutable
+as $$
+  select nullif(lower(trim(coalesce(p_name, ''))), '');
+$$;
+
+create or replace function public.seller_record_container_lend_for_customer(
+  p_customer_id uuid,
+  p_quantity integer,
+  p_container_numbers text default null,
+  p_pos_sale_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_business uuid := public.seller_business_id(auth.uid());
+  v_nums text := nullif(trim(coalesce(p_container_numbers, '')), '');
+begin
+  if not public.is_seller(auth.uid()) then
+    raise exception 'Only sellers can record container lends';
+  end if;
+  if v_business is null then
+    raise exception 'Seller workspace not available';
+  end if;
+  if p_quantity is null or p_quantity < 1 then
+    return jsonb_build_object('ok', false, 'error', 'quantity', 'message', 'Quantity must be at least 1.');
+  end if;
+  if p_customer_id is null then
+    return jsonb_build_object('ok', false, 'error', 'customer', 'message', 'Customer is required.');
+  end if;
+
+  if not exists (select 1 from public.profiles p where p.user_id = p_customer_id) then
+    return jsonb_build_object('ok', false, 'error', 'unknown_customer', 'message', 'Customer not found.');
+  end if;
+
+  if p_pos_sale_id is not null then
+    if not exists (
+      select 1 from public.pos_sales ps
+      where ps.id = p_pos_sale_id and ps.seller_id = v_business
+    ) then
+      return jsonb_build_object('ok', false, 'error', 'bad_sale', 'message', 'POS sale not found.');
+    end if;
+  end if;
+
+  insert into public.seller_container_movements (
+    seller_id, customer_id, order_id, movement_type, quantity, container_numbers
+  ) values (
+    v_business, p_customer_id, null, 'lend', p_quantity, v_nums
+  );
+
+  insert into public.seller_customer_container_balance (
+    seller_id, customer_id, outstanding_count, identifier_notes
+  )
+  values (
+    v_business,
+    p_customer_id,
+    p_quantity,
+    v_nums
+  )
+  on conflict (seller_id, customer_id) do update set
+    outstanding_count = public.seller_customer_container_balance.outstanding_count + excluded.outstanding_count,
+    identifier_notes = case
+      when v_nums is null then public.seller_customer_container_balance.identifier_notes
+      else trim(both from
+        coalesce(nullif(trim(public.seller_customer_container_balance.identifier_notes), ''), '')
+        ||
+        case
+          when coalesce(trim(public.seller_customer_container_balance.identifier_notes), '') <> '' then '; '
+          else ''
+        end
+        || v_nums
+      )
+    end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'seller_id', v_business,
+    'customer_id', p_customer_id,
+    'outstanding_added', p_quantity
+  );
+end;
+$$;
+
+create or replace function public.seller_record_pos_container_lend(
+  p_customer_name text,
+  p_quantity integer,
+  p_container_numbers text default null,
+  p_pos_sale_id uuid default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_business uuid := public.seller_business_id(auth.uid());
+  v_key text := public.normalize_pos_customer_name_key(p_customer_name);
+  v_display text := nullif(trim(coalesce(p_customer_name, '')), '');
+  v_nums text := nullif(trim(coalesce(p_container_numbers, '')), '');
+begin
+  if not public.is_seller(auth.uid()) then
+    raise exception 'Only sellers can record container lends';
+  end if;
+  if v_business is null then
+    raise exception 'Seller workspace not available';
+  end if;
+  if v_key is null then
+    return jsonb_build_object('ok', false, 'error', 'name', 'message', 'Customer name is required.');
+  end if;
+  if p_quantity is null or p_quantity < 1 then
+    return jsonb_build_object('ok', false, 'error', 'quantity', 'message', 'Quantity must be at least 1.');
+  end if;
+
+  if p_pos_sale_id is not null then
+    if not exists (
+      select 1 from public.pos_sales ps
+      where ps.id = p_pos_sale_id and ps.seller_id = v_business
+    ) then
+      return jsonb_build_object('ok', false, 'error', 'bad_sale', 'message', 'POS sale not found.');
+    end if;
+  end if;
+
+  insert into public.seller_pos_container_movements (
+    seller_id, customer_name_key, pos_sale_id, movement_type, quantity, container_numbers
+  ) values (
+    v_business, v_key, p_pos_sale_id, 'lend', p_quantity, v_nums
+  );
+
+  insert into public.seller_pos_container_balance (
+    seller_id, customer_name_key, display_name, outstanding_count, identifier_notes
+  )
+  values (
+    v_business, v_key, v_display, p_quantity, v_nums
+  )
+  on conflict (seller_id, customer_name_key) do update set
+    display_name = coalesce(excluded.display_name, public.seller_pos_container_balance.display_name),
+    outstanding_count = public.seller_pos_container_balance.outstanding_count + excluded.outstanding_count,
+    identifier_notes = case
+      when v_nums is null then public.seller_pos_container_balance.identifier_notes
+      else trim(both from
+        coalesce(nullif(trim(public.seller_pos_container_balance.identifier_notes), ''), '')
+        ||
+        case
+          when coalesce(trim(public.seller_pos_container_balance.identifier_notes), '') <> '' then '; '
+          else ''
+        end
+        || v_nums
+      )
+    end,
+    updated_at = now();
+
+  return jsonb_build_object(
+    'ok', true,
+    'seller_id', v_business,
+    'customer_name_key', v_key,
+    'outstanding_added', p_quantity
+  );
+end;
+$$;
+
+create or replace function public.seller_record_pos_container_return(
+  p_customer_name text,
+  p_quantity integer,
+  p_container_numbers text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_business uuid := public.seller_business_id(auth.uid());
+  v_key text := public.normalize_pos_customer_name_key(p_customer_name);
+  v_current integer;
+  v_notes text;
+  v_nums text := nullif(trim(coalesce(p_container_numbers, '')), '');
+  v_id_count integer;
+  v_tok text;
+begin
+  if not public.is_seller(auth.uid()) then
+    raise exception 'Only sellers can record container returns';
+  end if;
+  if v_business is null then
+    raise exception 'Seller workspace not available';
+  end if;
+  if v_key is null then
+    return jsonb_build_object('ok', false, 'error', 'name', 'message', 'Customer name is required.');
+  end if;
+  if p_quantity is null or p_quantity < 1 then
+    return jsonb_build_object('ok', false, 'error', 'quantity', 'message', 'Quantity must be at least 1.');
+  end if;
+
+  select b.outstanding_count, b.identifier_notes
+  into v_current, v_notes
+  from public.seller_pos_container_balance b
+  where b.seller_id = v_business and b.customer_name_key = v_key;
+
+  if coalesce(v_current, 0) < 1 then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'none_outstanding',
+      'message', 'This customer has no borrowed containers recorded.'
+    );
+  end if;
+
+  if v_nums is not null then
+    select count(*)::integer
+    into v_id_count
+    from unnest(regexp_split_to_array(v_nums, '\s*[,;]\s*')) as x
+    where trim(x) <> '';
+
+    if coalesce(v_id_count, 0) < 1 then
+      return jsonb_build_object('ok', false, 'error', 'bad_numbers', 'message', 'Invalid container numbers.');
+    end if;
+
+    if v_id_count <> p_quantity then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'count_mismatch',
+        'message', 'Number of container IDs must match the return quantity.'
+      );
+    end if;
+
+    if coalesce(trim(v_notes), '') <> '' then
+      foreach v_tok in array regexp_split_to_array(v_nums, '\s*[,;]\s*') loop
+        v_tok := trim(v_tok);
+        if v_tok = '' then
+          continue;
+        end if;
+        if not exists (
+          select 1
+          from unnest(regexp_split_to_array(v_notes, '\s*[,;]\s*')) as n(id)
+          where trim(n.id) <> '' and lower(trim(n.id)) = lower(v_tok)
+        ) then
+          return jsonb_build_object(
+            'ok', false,
+            'error', 'unknown_id',
+            'message',
+            format('Container ID not found on this customer: %s', v_tok)
+          );
+        end if;
+      end loop;
+    end if;
+  end if;
+
+  if coalesce(v_current, 0) < p_quantity then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'too_many',
+      'message',
+      format('Only %s container(s) are recorded as borrowed for this customer.', coalesce(v_current, 0))
+    );
+  end if;
+
+  insert into public.seller_pos_container_movements (
+    seller_id, customer_name_key, movement_type, quantity, container_numbers
+  ) values (
+    v_business, v_key, 'return', p_quantity, v_nums
+  );
+
+  update public.seller_pos_container_balance b
+    set
+      outstanding_count = b.outstanding_count - p_quantity,
+      identifier_notes = case
+        when b.outstanding_count - p_quantity <= 0 then null
+        when v_nums is not null then public.seller_container_notes_remove_ids(b.identifier_notes, v_nums)
+        else b.identifier_notes
+      end,
+      updated_at = now()
+  where b.seller_id = v_business and b.customer_name_key = v_key;
+
+  return jsonb_build_object(
+    'ok', true,
+    'seller_id', v_business,
+    'customer_name_key', v_key,
+    'returned', p_quantity,
+    'outstanding_remaining', greatest(coalesce(v_current, 0) - p_quantity, 0)
+  );
+end;
+$$;
+
+-- Allow returns when balance exists (POS / lend-for-customer), not only when online orders exist.
+create or replace function public.seller_record_container_return(
+  p_customer_id uuid,
+  p_quantity integer,
+  p_order_id uuid default null,
+  p_container_numbers text default null
+)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_business uuid := public.seller_business_id(auth.uid());
+  v_current integer;
+  v_notes text;
+  v_order_customer uuid;
+  v_order_seller uuid;
+  v_nums text := nullif(trim(coalesce(p_container_numbers, '')), '');
+  v_id_count integer;
+  v_tok text;
+begin
+  if not public.is_seller(auth.uid()) then
+    raise exception 'Only sellers can record container returns';
+  end if;
+  if v_business is null then
+    raise exception 'Seller workspace not available';
+  end if;
+  if p_quantity is null or p_quantity < 1 then
+    return jsonb_build_object('ok', false, 'error', 'quantity', 'message', 'Quantity must be at least 1.');
+  end if;
+
+  select b.outstanding_count, b.identifier_notes
+  into v_current, v_notes
+  from public.seller_customer_container_balance b
+  where b.seller_id = v_business and b.customer_id = p_customer_id;
+
+  if coalesce(v_current, 0) < 1 then
+    if not exists (
+      select 1 from public.orders o
+      where o.seller_id = v_business and o.customer_id = p_customer_id
+    ) then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'unknown_customer',
+        'message', 'No orders found for this customer at your store.'
+      );
+    end if;
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'none_outstanding',
+      'message', 'This customer has no borrowed containers recorded.'
+    );
+  end if;
+
+  if p_order_id is not null then
+    select o.customer_id, o.seller_id into v_order_customer, v_order_seller
+    from public.orders o where o.id = p_order_id;
+    if v_order_seller is null or v_order_seller <> v_business then
+      return jsonb_build_object('ok', false, 'error', 'bad_order', 'message', 'Order does not belong to your store.');
+    end if;
+    if v_order_customer <> p_customer_id then
+      return jsonb_build_object('ok', false, 'error', 'bad_order_customer', 'message', 'Order customer mismatch.');
+    end if;
+  end if;
+
+  if v_nums is not null then
+    select count(*)::integer
+    into v_id_count
+    from unnest(regexp_split_to_array(v_nums, '\s*[,;]\s*')) as x
+    where trim(x) <> '';
+
+    if coalesce(v_id_count, 0) < 1 then
+      return jsonb_build_object('ok', false, 'error', 'bad_numbers', 'message', 'Invalid container numbers.');
+    end if;
+
+    if v_id_count <> p_quantity then
+      return jsonb_build_object(
+        'ok', false,
+        'error', 'count_mismatch',
+        'message', 'Number of container IDs must match the return quantity.'
+      );
+    end if;
+
+    if coalesce(trim(v_notes), '') <> '' then
+      foreach v_tok in array regexp_split_to_array(v_nums, '\s*[,;]\s*') loop
+        v_tok := trim(v_tok);
+        if v_tok = '' then
+          continue;
+        end if;
+        if not exists (
+          select 1
+          from unnest(regexp_split_to_array(v_notes, '\s*[,;]\s*')) as n(id)
+          where trim(n.id) <> '' and lower(trim(n.id)) = lower(v_tok)
+        ) then
+          return jsonb_build_object(
+            'ok', false,
+            'error', 'unknown_id',
+            'message',
+            format('Container ID not found on this customer: %s', v_tok)
+          );
+        end if;
+      end loop;
+    end if;
+  end if;
+
+  if coalesce(v_current, 0) < p_quantity then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'too_many',
+      'message',
+      format('Only %s container(s) are recorded as borrowed for this customer.', coalesce(v_current, 0))
+    );
+  end if;
+
+  insert into public.seller_container_movements (
+    seller_id, customer_id, order_id, movement_type, quantity, container_numbers
+  ) values (
+    v_business, p_customer_id, p_order_id, 'return', p_quantity, v_nums
+  );
+
+  update public.seller_customer_container_balance b
+    set
+      outstanding_count = b.outstanding_count - p_quantity,
+      identifier_notes = case
+        when b.outstanding_count - p_quantity <= 0 then null
+        when v_nums is not null then public.seller_container_notes_remove_ids(b.identifier_notes, v_nums)
+        else b.identifier_notes
+      end
+  where b.seller_id = v_business and b.customer_id = p_customer_id;
+
+  return jsonb_build_object(
+    'ok', true,
+    'seller_id', v_business,
+    'customer_id', p_customer_id,
+    'returned', p_quantity,
+    'outstanding_remaining', greatest(coalesce(v_current, 0) - p_quantity, 0)
+  );
+end;
+$$;
+
+revoke all on function public.seller_record_container_lend_for_customer(uuid, integer, text, uuid) from public;
+grant execute on function public.seller_record_container_lend_for_customer(uuid, integer, text, uuid) to authenticated;
+grant execute on function public.seller_record_container_lend_for_customer(uuid, integer, text, uuid) to service_role;
+
+revoke all on function public.seller_record_pos_container_lend(text, integer, text, uuid) from public;
+grant execute on function public.seller_record_pos_container_lend(text, integer, text, uuid) to authenticated;
+grant execute on function public.seller_record_pos_container_lend(text, integer, text, uuid) to service_role;
+
+revoke all on function public.seller_record_pos_container_return(text, integer, text) from public;
+grant execute on function public.seller_record_pos_container_return(text, integer, text) to authenticated;
+grant execute on function public.seller_record_pos_container_return(text, integer, text) to service_role;
+
+
+-- Hide walk-in POS customer names from seller/admin customer lists (sales history unchanged).
+
+create table if not exists public.seller_hidden_pos_customers (
+  seller_id uuid not null references public.profiles(user_id) on delete cascade,
+  customer_name_key text not null,
+  created_at timestamptz not null default now(),
+  primary key (seller_id, customer_name_key)
+);
+
+create index if not exists seller_hidden_pos_customers_seller_idx
+  on public.seller_hidden_pos_customers (seller_id);
+
+alter table public.seller_hidden_pos_customers enable row level security;
+
+drop policy if exists "seller_hidden_pos seller read own" on public.seller_hidden_pos_customers;
+create policy "seller_hidden_pos seller read own"
+  on public.seller_hidden_pos_customers for select
+  using (
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
+  );
+
+drop policy if exists "seller_hidden_pos seller insert own" on public.seller_hidden_pos_customers;
+create policy "seller_hidden_pos seller insert own"
+  on public.seller_hidden_pos_customers for insert
+  with check (
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
+    and char_length(trim(customer_name_key)) > 0
+  );
+
+drop policy if exists "seller_hidden_pos seller delete own" on public.seller_hidden_pos_customers;
+create policy "seller_hidden_pos seller delete own"
+  on public.seller_hidden_pos_customers for delete
+  using (
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
+  );
+
+grant select, insert, delete on table public.seller_hidden_pos_customers to authenticated;
+
+-- Walk-in names typed in POS, saved even before the first sale.
+create table if not exists public.seller_pos_customers (
+  seller_id uuid not null references public.profiles(user_id) on delete cascade,
+  customer_name_key text not null,
+  display_name text not null,
+  created_at timestamptz not null default now(),
+  primary key (seller_id, customer_name_key)
+);
+
+create index if not exists seller_pos_customers_seller_idx
+  on public.seller_pos_customers (seller_id, created_at desc);
+
+alter table public.seller_pos_customers enable row level security;
+
+drop policy if exists "seller_pos_customers seller read own" on public.seller_pos_customers;
+create policy "seller_pos_customers seller read own"
+  on public.seller_pos_customers for select
+  using (
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
+  );
+
+drop policy if exists "seller_pos_customers seller insert own" on public.seller_pos_customers;
+create policy "seller_pos_customers seller insert own"
+  on public.seller_pos_customers for insert
+  with check (
+    public.is_seller(auth.uid())
+    and seller_id = public.seller_business_id(auth.uid())
+    and char_length(trim(customer_name_key)) > 0
+    and char_length(trim(display_name)) > 0
+  );
+
+grant select, insert on table public.seller_pos_customers to authenticated;
+
+
+-- Owner-only: wipe online orders, POS sales, containers, loyalty sales data for this store.
+-- Password is verified in admin-web (signInWithPassword) before calling this RPC.
+-- Run in Supabase SQL Editor. Does NOT delete products, inventory, expenses, or staff.
+
+create or replace function public.owner_clear_store_sales_history()
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_business uuid := public.seller_business_id(v_owner);
+  v_n integer;
+  v_orders integer := 0;
+  v_pos integer := 0;
+  v_notifications integer := 0;
+  v_containers integer := 0;
+  v_loyalty_balances integer := 0;
+  v_loyalty_vouchers integer := 0;
+begin
+  if v_owner is null then
+    raise exception 'Not authenticated';
+  end if;
+  if v_business is null or v_business is distinct from v_owner then
+    raise exception 'Only the store administrator can clear sales history';
+  end if;
+
+  if to_regclass('public.seller_pos_container_movements') is not null then
+    delete from public.seller_pos_container_movements where seller_id = v_business;
+    get diagnostics v_n = row_count;
+    v_containers := v_containers + coalesce(v_n, 0);
+  end if;
+
+  if to_regclass('public.seller_pos_container_balance') is not null then
+    delete from public.seller_pos_container_balance where seller_id = v_business;
+    get diagnostics v_n = row_count;
+    v_containers := v_containers + coalesce(v_n, 0);
+  end if;
+
+  delete from public.seller_container_movements where seller_id = v_business;
+  get diagnostics v_n = row_count;
+  v_containers := v_containers + coalesce(v_n, 0);
+
+  delete from public.seller_customer_container_balance where seller_id = v_business;
+  get diagnostics v_n = row_count;
+  v_containers := v_containers + coalesce(v_n, 0);
+
+  delete from public.loyalty_vouchers where seller_id = v_business;
+  get diagnostics v_loyalty_vouchers = row_count;
+
+  delete from public.loyalty_balances where seller_id = v_business;
+  get diagnostics v_loyalty_balances = row_count;
+
+  delete from public.notifications n
+  where n.recipient_id in (
+    select p.user_id
+    from public.profiles p
+    where p.user_id = v_owner
+       or (p.seller_workspace_owner_id = v_owner and p.seller_team_role = 'staff')
+  );
+  get diagnostics v_notifications = row_count;
+
+  delete from public.orders where seller_id = v_business;
+  get diagnostics v_orders = row_count;
+
+  delete from public.pos_sales where seller_id = v_business;
+  get diagnostics v_pos = row_count;
+
+  if to_regclass('public.seller_pos_customers') is not null then
+    delete from public.seller_pos_customers where seller_id = v_business;
+  end if;
+
+  return jsonb_build_object(
+    'ok', true,
+    'deleted_orders', v_orders,
+    'deleted_pos_sales', v_pos,
+    'deleted_team_notifications', v_notifications,
+    'deleted_container_rows', v_containers,
+    'deleted_loyalty_balances', v_loyalty_balances,
+    'deleted_loyalty_vouchers', v_loyalty_vouchers
+  );
+end;
+$$;
+
+revoke all on function public.owner_clear_store_sales_history() from public;
+grant execute on function public.owner_clear_store_sales_history() to authenticated;
+grant execute on function public.owner_clear_store_sales_history() to service_role;
+
+
+-- Store owner removes a customer from their list; deletes Auth user only when safe (no orders).
+
+create or replace function public.owner_remove_customer_from_store(p_customer_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_owner uuid := auth.uid();
+  v_business uuid := public.seller_business_id(v_owner);
+begin
+  if v_owner is null then
+    raise exception 'Not authenticated';
+  end if;
+  if v_business is null or v_business <> v_owner then
+    raise exception 'Only the store administrator can remove customers';
+  end if;
+  if p_customer_id is null then
+    raise exception 'Missing customer id';
+  end if;
+  if p_customer_id = v_owner then
+    raise exception 'Invalid customer';
+  end if;
+
+  if not exists (
+    select 1 from public.profiles p
+    where p.user_id = p_customer_id
+      and p.role = 'customer'::public.user_role
+  ) then
+    return jsonb_build_object('ok', false, 'error', 'NOT_CUSTOMER', 'message', 'Not a customer account.');
+  end if;
+
+  insert into public.seller_hidden_customers (seller_id, customer_id)
+  values (v_business, p_customer_id)
+  on conflict (seller_id, customer_id) do nothing;
+
+  if exists (select 1 from public.orders o where o.customer_id = p_customer_id) then
+    return jsonb_build_object(
+      'ok', true,
+      'hidden', true,
+      'deleted', false,
+      'message', 'Removed from your customer list. They still have order history, so their login account was kept.'
+    );
+  end if;
+
+  begin
+    delete from public.profiles where user_id = p_customer_id;
+    delete from auth.users where id = p_customer_id;
+    return jsonb_build_object(
+      'ok', true,
+      'hidden', true,
+      'deleted', true,
+      'message', 'Customer removed from your list and their account was deleted (no orders on record).'
+    );
+  exception
+    when others then
+      return jsonb_build_object(
+        'ok', true,
+        'hidden', true,
+        'deleted', false,
+        'message', 'Removed from your customer list. Account could not be fully deleted due to linked data.'
+      );
+  end;
+end;
+$$;
+
+revoke all on function public.owner_remove_customer_from_store(uuid) from public;
+grant execute on function public.owner_remove_customer_from_store(uuid) to authenticated;
+grant execute on function public.owner_remove_customer_from_store(uuid) to service_role;
+
+-- Store gives 1 free refill when a customer has at least 10 points, then uses those 10 points.
+create or replace function public.seller_give_free_refill(p_customer_id uuid)
+returns jsonb
+language plpgsql
+security definer
+set search_path = public
+set row_security = off
+as $$
+declare
+  v_business uuid := public.seller_business_id(auth.uid());
+  v_left int;
+  v_name text;
+begin
+  if auth.uid() is null then
+    raise exception 'Not authenticated';
+  end if;
+  if not public.is_seller(auth.uid()) or v_business is null then
+    return jsonb_build_object('ok', false, 'error', 'not_seller', 'message', 'Only the store can give a free refill.');
+  end if;
+  if p_customer_id is null then
+    return jsonb_build_object('ok', false, 'error', 'missing_customer', 'message', 'Choose a customer.');
+  end if;
+
+  update public.loyalty_balances lb
+  set
+    points_balance = lb.points_balance - 10,
+    updated_at = now()
+  where lb.customer_id = p_customer_id
+    and lb.seller_id = v_business
+    and lb.points_balance >= 10
+  returning lb.points_balance into v_left;
+
+  if not found then
+    return jsonb_build_object(
+      'ok', false,
+      'error', 'insufficient_points',
+      'message', 'This customer does not have 10 points yet.'
+    );
+  end if;
+
+  select coalesce(nullif(trim(p.display_name), ''), 'Customer') into v_name
+  from public.profiles p
+  where p.user_id = p_customer_id;
+
+  begin
+    insert into public.notifications (recipient_id, order_id, kind, title, body, data)
+    values (
+      p_customer_id,
+      null,
+      'loyalty_points',
+      'Free refill given',
+      'The store gave you 1 free refill. 10 loyalty points were used.'
+        || case when v_left > 0 then ' You have ' || v_left::text || ' points left.' else ' Your points are back to 0.' end,
+      jsonb_build_object('points_remaining', v_left, 'free_refill', true, 'app', 'customer')
+    );
+  exception when others then
+    null;
+  end;
+
+  return jsonb_build_object(
+    'ok', true,
+    'points_remaining', v_left,
+    'customer_name', v_name
+  );
+end;
+$$;
+
+revoke all on function public.seller_give_free_refill(uuid) from public;
+grant execute on function public.seller_give_free_refill(uuid) to authenticated;
+grant execute on function public.seller_give_free_refill(uuid) to service_role;
+
+-- -----------------------------------------------------------------------------
+-- Realtime tables the apps subscribe to
+-- -----------------------------------------------------------------------------
+do $realtime_wc$ begin
+  begin alter publication supabase_realtime add table public.profiles; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.ewallet_accounts; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.pos_sales; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.business_expenses; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.seller_customer_container_balance; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.seller_pos_container_balance; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.seller_hidden_pos_customers; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.seller_pos_customers; exception when others then null; end;
+  begin alter publication supabase_realtime add table public.loyalty_balances; exception when others then null; end;
+end $realtime_wc$;

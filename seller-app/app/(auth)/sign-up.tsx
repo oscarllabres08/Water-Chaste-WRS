@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Image, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
+import { useEffect, useRef, useState } from 'react';
+import { Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native';
 import { useRouter } from 'expo-router';
 
 import {
@@ -27,6 +27,35 @@ export default function SignUpScreen() {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [canScroll, setCanScroll] = useState(false);
+  const [keyboardOpen, setKeyboardOpen] = useState(false);
+  const layoutHeight = useRef(0);
+  const contentHeight = useRef(0);
+  const scrollRef = useRef<ScrollView>(null);
+
+  useEffect(() => {
+    const showEvent = Platform.OS === 'ios' ? 'keyboardWillShow' : 'keyboardDidShow';
+    const hideEvent = Platform.OS === 'ios' ? 'keyboardWillHide' : 'keyboardDidHide';
+    const showSub = Keyboard.addListener(showEvent, () => setKeyboardOpen(true));
+    const hideSub = Keyboard.addListener(hideEvent, () => {
+      setKeyboardOpen(false);
+      if (contentHeight.current <= layoutHeight.current + 8) {
+        scrollRef.current?.scrollTo({ y: 0, animated: false });
+      }
+    });
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+    };
+  }, []);
+
+  function updateScroll(layout: number, content: number) {
+    if (layout > 0) layoutHeight.current = layout;
+    if (content > 0) contentHeight.current = content;
+    if (layoutHeight.current <= 0 || contentHeight.current <= 0) return;
+    const next = contentHeight.current > layoutHeight.current + 8;
+    setCanScroll((prev) => (prev === next ? prev : next));
+  }
 
   async function signUp() {
     setError(null);
@@ -116,17 +145,30 @@ export default function SignUpScreen() {
         keyboardVerticalOffset={Platform.OS === 'ios' ? 8 : 0}
       >
         <ScrollView
+          ref={scrollRef}
+          style={{ flex: 1 }}
+          scrollEnabled={canScroll || keyboardOpen}
+          bounces={false}
+          alwaysBounceVertical={false}
+          overScrollMode="never"
           keyboardDismissMode="on-drag"
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={false}
-          contentContainerStyle={{
-            padding: theme.spacing.md,
-            paddingBottom: 280,
-            flexGrow: 1,
-          }}
+          automaticallyAdjustKeyboardInsets
+          onLayout={(e) => updateScroll(e.nativeEvent.layout.height, 0)}
+          contentContainerStyle={{ flexGrow: 0 }}
         >
+          <View
+            style={{ padding: theme.spacing.md }}
+            onLayout={(e) => updateScroll(0, e.nativeEvent.layout.height)}
+          >
           <View style={{ alignItems: 'center', marginBottom: theme.spacing.md }}>
-            <Image source={authLogo} style={{ width: 110, height: 110, borderRadius: 26 }} resizeMode="contain" />
+            <Image
+              source={authLogo}
+              style={{ width: 280, height: 168 }}
+              resizeMode="contain"
+              accessibilityLabel="Water Chaste"
+            />
           </View>
           <Text variant="title" weight="extrabold">
             Create seller account
@@ -190,6 +232,7 @@ export default function SignUpScreen() {
                 Back to login
               </Text>
             </Pressable>
+          </View>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>

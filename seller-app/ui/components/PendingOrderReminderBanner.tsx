@@ -1,4 +1,5 @@
 import { Pressable, View } from 'react-native';
+import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
 import { useRouter } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 
@@ -24,7 +25,9 @@ export function PendingOrderReminderBanner({ orders, topInset, onDismiss }: Prop
       : `${count} customer orders are still pending (30+ min unopened).`;
 
   return (
-    <View
+    <Animated.View
+      entering={FadeInDown.duration(340).springify().damping(16)}
+      exiting={FadeOutUp.duration(180)}
       pointerEvents="box-none"
       style={{
         position: 'absolute',
@@ -89,6 +92,6 @@ export function PendingOrderReminderBanner({ orders, topInset, onDismiss }: Prop
           <Ionicons name="close" size={18} color="#B45309" />
         </Pressable>
       </View>
-    </View>
+    </Animated.View>
   );
 }

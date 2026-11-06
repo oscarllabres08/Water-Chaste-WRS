@@ -114,7 +114,7 @@ export function CalendarPickerModal({ visible, selectedDate, minDate, onClose, o
                 borderRadius: 12,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: 'rgba(18,101,214,0.08)',
+                backgroundColor: 'rgba(0,114,240,0.08)',
               }}
             >
               <Ionicons name="chevron-back" size={22} color={theme.colors.primary} />
@@ -132,7 +132,7 @@ export function CalendarPickerModal({ visible, selectedDate, minDate, onClose, o
                 borderRadius: 12,
                 alignItems: 'center',
                 justifyContent: 'center',
-                backgroundColor: 'rgba(18,101,214,0.08)',
+                backgroundColor: 'rgba(0,114,240,0.08)',
               }}
             >
               <Ionicons name="chevron-forward" size={22} color={theme.colors.primary} />

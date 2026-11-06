@@ -1,4 +1,5 @@
 import { Modal, Pressable, View } from 'react-native';
+import Animated, { ZoomIn } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
 import { theme } from '../theme';
@@ -11,8 +12,8 @@ type Tone = 'primary' | 'warning' | 'success';
 
 const toneRing: Record<Tone, { bg: string; border: string; icon: string }> = {
   primary: {
-    bg: 'rgba(18,101,214,0.10)',
-    border: 'rgba(18,101,214,0.22)',
+    bg: 'rgba(0,114,240,0.10)',
+    border: 'rgba(0,114,240,0.22)',
     icon: theme.colors.primary,
   },
   warning: {
@@ -68,6 +69,7 @@ export function ConfirmActionModal({
           padding: theme.spacing.md,
         }}
       >
+        <Animated.View entering={ZoomIn.duration(280).springify().damping(15)} key={visible ? 'open' : 'closed'} style={{ width: '100%' }}>
         <Pressable
           onPress={() => {}}
           style={{
@@ -128,6 +130,7 @@ export function ConfirmActionModal({
             </View>
           )}
         </Pressable>
+        </Animated.View>
       </Pressable>
     </Modal>
   );

@@ -6,7 +6,7 @@
 // - SB_SERVICE_ROLE_KEY  (Supabase service role key)
 // - PUSH_WEBHOOK_SECRET (must match `system_settings.push_webhook_secret`)
 // - FCM_SERVICE_ACCOUNT_JSON  (Firebase service account JSON string)
-// - FCM_PROJECT_ID            (Firebase project id, e.g. "aquabeast-wrs")
+// - FCM_PROJECT_ID            (Water Chaste Firebase project id — not the previous client's project)
 //
 // Deploy:
 //   supabase functions deploy push-notify

@@ -1,4 +1,4 @@
-# Zoda WRS Admin Website
+# Water Chaste Admin Website
 
 Web dashboard for the **store owner (master admin)**. Uses the same Supabase project as `seller-app` and `customer-app`:
 

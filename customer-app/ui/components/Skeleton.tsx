@@ -29,7 +29,7 @@ export function Skeleton({ width = '100%', height, radius = 14, style }: Props) 
           width,
           height,
           borderRadius: radius,
-          backgroundColor: 'rgba(10,27,55,0.07)',
+          backgroundColor: 'rgba(7,20,46,0.07)',
           overflow: 'hidden',
           borderWidth: 1,
           borderColor: theme.colors.border,

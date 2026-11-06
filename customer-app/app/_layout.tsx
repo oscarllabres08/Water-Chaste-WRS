@@ -2,9 +2,9 @@ import { DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments, type Href } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useCallback, useEffect, useState } from 'react';
-import 'react-native-reanimated';
-import { Platform, Pressable, View } from 'react-native';
+import { useCallback, useEffect } from 'react';
+import Animated, { FadeInDown, FadeOutUp } from 'react-native-reanimated';
+import { Platform, Pressable } from 'react-native';
 
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
@@ -15,7 +15,6 @@ import {
   Nunito_800ExtraBold,
 } from '@expo-google-fonts/nunito';
 
-import { hasAcceptedLegalOnboarding } from '../lib/legalOnboarding';
 import { AuthProvider, useAuth } from '../providers/AuthProvider';
 import { NotificationsProvider, useNotifications } from '../providers/NotificationsProvider';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -111,8 +110,6 @@ function AuthGate() {
   const segments = useSegments();
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const [onboardingReady, setOnboardingReady] = useState(false);
-  const [onboardingAccepted, setOnboardingAccepted] = useState(false);
 
   const orderHrefFor = useCallback(
     (orderId: string) => {
@@ -133,19 +130,7 @@ function AuthGate() {
   }, [router, orderHrefFor]);
 
   useEffect(() => {
-    let alive = true;
-    void hasAcceptedLegalOnboarding().then((accepted) => {
-      if (!alive) return;
-      setOnboardingAccepted(accepted);
-      setOnboardingReady(true);
-    });
-    return () => {
-      alive = false;
-    };
-  }, [segments]);
-
-  useEffect(() => {
-    if (loading || !onboardingReady) return;
+    if (loading) return;
 
     const inAuth = segments[0] === '(auth)';
     const authScreen = segments[1];
@@ -153,26 +138,22 @@ function AuthGate() {
     const onLegalWelcome = inAuth && authScreen === 'legal-welcome';
 
     if (!user) {
-      if (!onboardingAccepted && !onLegalWelcome && !inLegal) {
-        router.replace('/(auth)/legal-welcome');
-        return;
-      }
-      if (onboardingAccepted && onLegalWelcome) {
+      if (onLegalWelcome) {
         router.replace('/(auth)/sign-in');
         return;
       }
-      if (onboardingAccepted && !inAuth && !inLegal) {
+      if (!inAuth && !inLegal) {
         router.replace('/(auth)/sign-in');
-        return;
       }
+      return;
     }
 
     if (user && inAuth) router.replace('/(tabs)');
-  }, [user, loading, onboardingReady, onboardingAccepted, segments, router]);
+  }, [user, loading, segments, router]);
 
   return (
     <>
-      <Stack screenOptions={{ animation: 'fade_from_bottom', animationDuration: 220 }}>
+      <Stack screenOptions={{ animation: 'fade_from_bottom', animationDuration: 320 }}>
         <Stack.Screen name="(auth)" options={{ headerShown: false }} />
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
         <Stack.Screen name="order" options={{ headerShown: false }} />
@@ -180,7 +161,9 @@ function AuthGate() {
       </Stack>
 
       {toast ? (
-        <View
+        <Animated.View
+          entering={FadeInDown.duration(320).springify().damping(16)}
+          exiting={FadeOutUp.duration(180)}
           pointerEvents="box-none"
           style={{
             position: 'absolute',
@@ -223,7 +206,7 @@ function AuthGate() {
               {toast.body}
             </Text>
           </Pressable>
-        </View>
+        </Animated.View>
       ) : null}
     </>
   );

@@ -12,7 +12,7 @@ import { Button } from '../../ui/components/Button';
 import { LegalAcceptanceRow } from '../../ui/components/LegalAcceptanceRow';
 import { theme } from '../../ui/theme';
 
-const authLogo = require('../../assets/icon.png');
+const authLogo = require('../../assets/logo.png');
 
 export default function LegalWelcomeScreen() {
   const router = useRouter();
@@ -40,24 +40,28 @@ export default function LegalWelcomeScreen() {
   return (
     <Screen style={{ padding: 0 }}>
       <ScrollView
+        style={{ flex: 1 }}
+        bounces={false}
+        alwaysBounceVertical={false}
+        overScrollMode="never"
         contentContainerStyle={{
           padding: theme.spacing.md,
           paddingBottom: theme.spacing.xl,
-          flexGrow: 1,
         }}
         showsVerticalScrollIndicator={false}
       >
         <View style={{ alignItems: 'center', marginBottom: theme.spacing.sm }}>
           <Image
             source={authLogo}
-            style={{ width: 96, height: 96, borderRadius: 24 }}
+            style={{ width: 280, height: 168 }}
             resizeMode="contain"
+            accessibilityLabel="Water Chaste"
             accessibilityIgnoresInvertColors
           />
         </View>
 
         <Text variant="title" weight="extrabold" style={{ textAlign: 'center' }}>
-          Welcome to Zoda WRS
+          Welcome to Water Chaste
         </Text>
         <Text variant="muted" style={{ marginTop: 6, textAlign: 'center', lineHeight: 20 }}>
           Before you sign in, please review how we handle your information.

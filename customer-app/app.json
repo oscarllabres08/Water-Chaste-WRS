@@ -1,15 +1,15 @@
 {
   "expo": {
-    "name": "Zoda WRS",
-    "slug": "customer-app",
+    "name": "Water Chaste",
+    "slug": "water-chaste-customer",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-    "scheme": "aquabeastcustomer",
+    "scheme": "waterchastecustomer",
     "userInterfaceStyle": "automatic",
     "androidStatusBar": {
       "barStyle": "dark-content",
-      "backgroundColor": "#E8F4FC",
+      "backgroundColor": "#F3F8FC",
       "translucent": false
     },
     "splash": {
@@ -19,7 +19,8 @@
     },
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.aquabeast.customerapp"
+      "bundleIdentifier": "com.waterchaste.customer",
+      "googleServicesFile": "./GoogleService-Info.plist"
     },
     "android": {
       "softwareKeyboardLayoutMode": "resize",
@@ -28,8 +29,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#FFFFFF"
       },
-      "package": "com.aquabeast.customerapp",
-      "versionCode": 3,
+      "package": "com.waterchaste.customer",
+      "versionCode": 1,
       "predictiveBackGestureEnabled": false,
       "permissions": [
         "android.permission.POST_NOTIFICATIONS",
@@ -57,12 +58,11 @@
     "experiments": {
       "typedRoutes": true
     },
-    "extra": {
-      "router": {},
-      "eas": {
-        "projectId": "20419748-586e-4336-81f5-ba73e96d7f90"
-      }
+    "updates": {
+      "enabled": false
     },
-    "owner": "llabresoscar08"
+    "extra": {
+      "router": {}
+    }
   }
 }

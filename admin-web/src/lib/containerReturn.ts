@@ -48,7 +48,7 @@ export function joinContainerIds(ids: string[]): string {
 function rpcHint(message: string): string {
   const m = message.toLowerCase();
   if (m.includes('could not choose the best candidate function')) {
-    return ' Run supabase/patches/fix-container-return-overload.sql in the Supabase SQL Editor.';
+    return ' Run supabase/water-chaste.sql once in the Supabase SQL Editor.';
   }
   if (
     m.includes('could not find') ||
@@ -57,7 +57,7 @@ function rpcHint(message: string): string {
     m.includes('404') ||
     m.includes('pgrst202')
   ) {
-    return ' Run supabase/patches/fix-container-return-overload.sql in the Supabase SQL Editor.';
+    return ' Run supabase/water-chaste.sql once in the Supabase SQL Editor.';
   }
   return '';
 }

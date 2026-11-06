@@ -279,9 +279,9 @@ export default function WalletsScreen() {
               flexDirection: 'row',
               padding: 6,
               borderRadius: 18,
-              backgroundColor: '#EAF2FF',
+              backgroundColor: '#E5F3FC',
               borderWidth: 1,
-              borderColor: 'rgba(18,101,214,0.10)',
+              borderColor: 'rgba(0,114,240,0.10)',
               gap: 6,
             }}
           >
@@ -297,9 +297,9 @@ export default function WalletsScreen() {
                     borderRadius: 14,
                     alignItems: 'center',
                     justifyContent: 'center',
-                    backgroundColor: active ? 'rgba(18,101,214,0.16)' : 'transparent',
+                    backgroundColor: active ? 'rgba(0,114,240,0.16)' : 'transparent',
                     borderWidth: active ? 1 : 0,
-                    borderColor: active ? 'rgba(18,101,214,0.28)' : 'transparent',
+                    borderColor: active ? 'rgba(0,114,240,0.28)' : 'transparent',
                   }}
                 >
                   <Text weight="extrabold" style={{ color: active ? theme.colors.primary : theme.colors.muted }}>
@@ -354,7 +354,7 @@ export default function WalletsScreen() {
                     width: 84,
                     height: 84,
                     borderRadius: 18,
-                    backgroundColor: '#EEF4FF',
+                    backgroundColor: '#E7F4FC',
                     borderWidth: 1,
                     borderColor: theme.colors.border,
                     overflow: 'hidden',

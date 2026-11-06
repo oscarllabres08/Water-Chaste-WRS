@@ -58,7 +58,7 @@ export default function HomeScreen() {
       transform: [{ scale: s }],
       shadowOpacity: 0.16 + 0.18 * pulse.value,
       opacity: 1,
-      backgroundColor: `rgba(18,101,214,${glow})`,
+      backgroundColor: `rgba(0,114,240,${glow})`,
     };
   });
 
@@ -70,17 +70,10 @@ export default function HomeScreen() {
           <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, gap: 10 }}>
             <Image
               source={brandLogo}
-              style={{ width: 48, height: 48, borderRadius: 24 }}
-              accessibilityLabel="Zoda WRS logo"
+              style={{ width: 168, height: 96 }}
+              resizeMode="contain"
+              accessibilityLabel="Water Chaste"
             />
-            <View style={{ flex: 1 }}>
-              <Text variant="title" weight="extrabold" style={{ letterSpacing: -0.2 }}>
-                ZODA WRS
-              </Text>
-              <Text variant="muted" weight="regular" style={{ marginTop: 2 }}>
-                Water refilling station
-              </Text>
-            </View>
           </View>
 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10 }}>
@@ -296,9 +289,9 @@ function MiniFeature({ icon, title, subtitle }: { icon: keyof typeof Ionicons.gl
           width: 38,
           height: 38,
           borderRadius: 14,
-          backgroundColor: 'rgba(18,101,214,0.10)',
+          backgroundColor: 'rgba(0,114,240,0.10)',
           borderWidth: 1,
-          borderColor: 'rgba(18,101,214,0.18)',
+          borderColor: 'rgba(0,114,240,0.18)',
           alignItems: 'center',
           justifyContent: 'center',
         }}
@@ -331,7 +324,7 @@ function HowRow({ step, title, subtitle }: { step: string; title: string; subtit
         borderRadius: 16,
         borderWidth: 1,
         borderColor: theme.colors.border,
-        backgroundColor: '#F8FBFF',
+        backgroundColor: '#F5FAFE',
       }}
     >
       <View
@@ -341,7 +334,7 @@ function HowRow({ step, title, subtitle }: { step: string; title: string; subtit
           borderRadius: 12,
           borderWidth: 1,
           borderColor: theme.colors.border,
-          backgroundColor: 'rgba(18,101,214,0.10)',
+          backgroundColor: 'rgba(0,114,240,0.10)',
           alignItems: 'center',
           justifyContent: 'center',
         }}
@@ -372,7 +365,7 @@ function ServiceRow({ icon, title, subtitle }: { icon: keyof typeof Ionicons.gly
         borderRadius: 16,
         borderWidth: 1,
         borderColor: theme.colors.border,
-        backgroundColor: '#F8FBFF',
+        backgroundColor: '#F5FAFE',
       }}
     >
       <View
@@ -381,8 +374,8 @@ function ServiceRow({ icon, title, subtitle }: { icon: keyof typeof Ionicons.gly
           height: 40,
           borderRadius: 14,
           borderWidth: 1,
-          borderColor: 'rgba(18,101,214,0.14)',
-          backgroundColor: 'rgba(18,101,214,0.08)',
+          borderColor: 'rgba(0,114,240,0.14)',
+          backgroundColor: 'rgba(0,114,240,0.08)',
           alignItems: 'center',
           justifyContent: 'center',
         }}
@@ -395,7 +388,7 @@ function ServiceRow({ icon, title, subtitle }: { icon: keyof typeof Ionicons.gly
           {subtitle}
         </Text>
       </View>
-      <Ionicons name="chevron-forward" size={18} color="rgba(10,27,55,0.30)" />
+      <Ionicons name="chevron-forward" size={18} color="rgba(7,20,46,0.30)" />
     </View>
   );
 }

@@ -206,7 +206,7 @@ export default function MyOrdersScreen() {
                         borderRadius: 16,
                         borderWidth: 1,
                         borderColor: theme.colors.border,
-                        backgroundColor: 'rgba(18,101,214,0.06)',
+                        backgroundColor: 'rgba(0,114,240,0.06)',
                       }}
                     >
                       <Text weight="extrabold" style={{ color: theme.colors.text }}>
@@ -261,10 +261,10 @@ function OrderRowCard({ row, onPress }: { row: OrderRow; onPress: () => void }) 
             borderRadius: 999,
             borderWidth: 1,
             borderColor: theme.colors.border,
-            backgroundColor: 'rgba(18,101,214,0.06)',
+            backgroundColor: 'rgba(0,114,240,0.06)',
           }}
         >
-          <Text variant="chip" weight="extrabold" style={{ color: 'rgba(10,27,55,0.8)' }}>
+          <Text variant="chip" weight="extrabold" style={{ color: 'rgba(7,20,46,0.8)' }}>
             {statusLabel(row.status)}
           </Text>
         </View>

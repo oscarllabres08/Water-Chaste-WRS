@@ -109,7 +109,7 @@ function statusOptionTint(key: string): { bg: string; border: string; icon: stri
     case 'pending':
       return { bg: 'rgba(106,122,149,0.12)', border: 'rgba(106,122,149,0.2)', icon: m };
     case 'confirmed':
-      return { bg: 'rgba(18,101,214,0.1)', border: 'rgba(18,101,214,0.2)', icon: p };
+      return { bg: 'rgba(0,114,240,0.1)', border: 'rgba(0,114,240,0.2)', icon: p };
     case 'preparing':
       return { bg: 'rgba(245,158,11,0.12)', border: 'rgba(245,158,11,0.25)', icon: w };
     case 'on_the_way':
@@ -565,7 +565,7 @@ export default function OrderDetailsScreen() {
                   paddingVertical: 12,
                   borderBottomWidth: 1,
                   borderBottomColor: theme.colors.border,
-                  backgroundColor: 'rgba(18,101,214,0.05)',
+                  backgroundColor: 'rgba(0,114,240,0.05)',
                 }}
               >
                 <Text weight="extrabold">Payment proof</Text>
@@ -653,9 +653,9 @@ export default function OrderDetailsScreen() {
                       paddingVertical: 6,
                       paddingHorizontal: 10,
                       borderRadius: 12,
-                      backgroundColor: 'rgba(18,101,214,0.08)',
+                      backgroundColor: 'rgba(0,114,240,0.08)',
                       borderWidth: 1,
-                      borderColor: 'rgba(18,101,214,0.14)',
+                      borderColor: 'rgba(0,114,240,0.14)',
                     }}
                   >
                     <Text variant="chip" weight="extrabold" style={{ color: theme.colors.primary }}>
@@ -725,8 +725,8 @@ export default function OrderDetailsScreen() {
                         padding: 12,
                         borderRadius: 18,
                         borderWidth: 1,
-                        borderColor: 'rgba(18,101,214,0.16)',
-                        backgroundColor: '#F8FBFF',
+                        borderColor: 'rgba(0,114,240,0.16)',
+                        backgroundColor: '#F5FAFE',
                       }}
                     >
                       <View style={{ flexDirection: 'row', gap: 12, alignItems: 'center' }}>
@@ -780,8 +780,8 @@ export default function OrderDetailsScreen() {
                                 paddingHorizontal: 8,
                                 borderRadius: 999,
                                 borderWidth: 1,
-                                borderColor: 'rgba(18,101,214,0.22)',
-                                backgroundColor: 'rgba(18,101,214,0.10)',
+                                borderColor: 'rgba(0,114,240,0.22)',
+                                backgroundColor: 'rgba(0,114,240,0.10)',
                               }}
                             >
                               <Text variant="chip" weight="extrabold" style={{ color: theme.colors.primary }}>
@@ -898,7 +898,7 @@ export default function OrderDetailsScreen() {
                         borderRadius: 16,
                         borderWidth: 1,
                         borderColor: theme.colors.border,
-                        backgroundColor: '#F8FBFF',
+                        backgroundColor: '#F5FAFE',
                       }}
                     >
                       <Text weight="extrabold">{paymentMethodLabel(order.payment_method)}</Text>
@@ -978,9 +978,9 @@ export default function OrderDetailsScreen() {
                           height: 56,
                           borderRadius: 28,
                           overflow: 'hidden',
-                          backgroundColor: 'rgba(18,101,214,0.08)',
+                          backgroundColor: 'rgba(0,114,240,0.08)',
                           borderWidth: 1,
-                          borderColor: 'rgba(18,101,214,0.2)',
+                          borderColor: 'rgba(0,114,240,0.2)',
                           alignItems: 'center',
                           justifyContent: 'center',
                           flexShrink: 0,
@@ -1064,7 +1064,7 @@ export default function OrderDetailsScreen() {
                       marginTop: 12,
                       padding: 12,
                       borderRadius: 16,
-                      backgroundColor: '#F8FBFF',
+                      backgroundColor: '#F5FAFE',
                       borderWidth: 1,
                       borderColor: theme.colors.border,
                     }}
@@ -1104,9 +1104,9 @@ export default function OrderDetailsScreen() {
                         padding: 12,
                         borderRadius: 14,
                         backgroundColor:
-                          outstandingContainers > 0 ? 'rgba(245,158,11,0.1)' : 'rgba(18,101,214,0.06)',
+                          outstandingContainers > 0 ? 'rgba(245,158,11,0.1)' : 'rgba(0,114,240,0.06)',
                         borderWidth: 1,
-                        borderColor: outstandingContainers > 0 ? 'rgba(245,158,11,0.35)' : 'rgba(18,101,214,0.14)',
+                        borderColor: outstandingContainers > 0 ? 'rgba(245,158,11,0.35)' : 'rgba(0,114,240,0.14)',
                       }}
                     >
                       <Text variant="muted" weight="bold" style={{ fontSize: 11 }}>
@@ -1197,7 +1197,7 @@ export default function OrderDetailsScreen() {
                         value={recordBorrowEnabled}
                         onValueChange={setRecordBorrowEnabled}
                         disabled={containersBusy}
-                        trackColor={{ false: 'rgba(106,122,149,0.35)', true: 'rgba(18,101,214,0.55)' }}
+                        trackColor={{ false: 'rgba(106,122,149,0.35)', true: 'rgba(0,114,240,0.55)' }}
                         thumbColor="#FFFFFF"
                       />
                     </View>
@@ -1277,7 +1277,7 @@ export default function OrderDetailsScreen() {
                           overflow: 'hidden',
                           borderWidth: 1,
                           borderColor: theme.colors.border,
-                          backgroundColor: '#EEF4FF',
+                          backgroundColor: '#E7F4FC',
                           alignItems: 'center',
                           justifyContent: 'center',
                         }}
@@ -1305,7 +1305,7 @@ export default function OrderDetailsScreen() {
                           paddingVertical: 6,
                           paddingHorizontal: 8,
                           borderRadius: 10,
-                          backgroundColor: 'rgba(18,101,214,0.06)',
+                          backgroundColor: 'rgba(0,114,240,0.06)',
                           borderWidth: 1,
                           borderColor: theme.colors.border,
                         }}
@@ -1404,7 +1404,7 @@ function OrderStatusSelect({
           paddingHorizontal: 12,
           borderRadius: 12,
           borderWidth: 1,
-          borderColor: 'rgba(18,101,214,0.22)',
+          borderColor: 'rgba(0,114,240,0.22)',
           backgroundColor: '#FFFFFF',
           opacity: updating ? 0.55 : 1,
         }}
@@ -1466,7 +1466,7 @@ function OrderStatusSelect({
                   paddingVertical: 14,
                   borderBottomWidth: 1,
                   borderBottomColor: theme.colors.border,
-                  backgroundColor: 'rgba(18,101,214,0.05)',
+                  backgroundColor: 'rgba(0,114,240,0.05)',
                 }}
               >
                 <Text variant="h2" weight="extrabold">
@@ -1507,7 +1507,7 @@ function OrderStatusSelect({
                         borderBottomWidth: idx < STATUS_OPTIONS.length - 1 ? 1 : 0,
                         borderBottomColor: theme.colors.border,
                         backgroundColor: active
-                          ? 'rgba(18,101,214,0.12)'
+                          ? 'rgba(0,114,240,0.12)'
                           : pressed
                             ? 'rgba(11,27,58,0.04)'
                             : '#FFFFFF',

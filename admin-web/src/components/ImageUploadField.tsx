@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 
+import { CameraIcon } from './UiIcons';
+
 type Props = {
   label?: string;
   hint?: string;
@@ -59,7 +61,7 @@ export function ImageUploadField({ label = 'Product image', hint, disabled, prev
         ) : (
           <div className="upload-placeholder">
             <span className="upload-icon" aria-hidden>
-              📷
+              <CameraIcon />
             </span>
             <div className="upload-placeholder-copy">
               <span className="upload-title">Tap to upload or drag &amp; drop</span>

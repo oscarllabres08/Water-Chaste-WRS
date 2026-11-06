@@ -23,14 +23,9 @@ type ExpenseRow = {
   created_at: string;
 };
 
-type ExpensesPageProps = {
-  variant?: 'wrs' | 'laundry';
-};
-
-export function ExpensesPage({ variant = 'wrs' }: ExpensesPageProps) {
+export function ExpensesPage() {
   const { businessId } = useAuth();
-  const isLaundry = variant === 'laundry';
-  const businessUnit = isLaundry ? 'laundry' : 'wrs';
+  const businessUnit = 'wrs';
   const [rows, setRows] = useState<ExpenseRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -164,93 +159,67 @@ export function ExpensesPage({ variant = 'wrs' }: ExpensesPageProps) {
     <>
       <PageHeader
         title="Expenses"
-        description={
-          isLaundry
-            ? "Track laundry shop costs by date. Laundry dashboard net income uses today's POS sales minus today's expenses."
-            : "Pick a date to review costs, then add new entries below. Dashboard net income uses today's sales minus today's expenses."
-        }
+        description="Pick a date to review costs, then add new entries below. Dashboard net income uses today's sales minus today's expenses."
       />
 
-      <div className="card card-flat expenses-filter-card">
-        <div className="expenses-filter-head">
-          <div>
-            <h2 className="card-title expenses-section-title">View by date</h2>
-            <p className="expenses-section-hint">Choose which day to review. Add new expenses in the form below.</p>
-          </div>
-        </div>
-        <div className="expenses-filter-toolbar">
-          <div className="field expenses-filter-date-field">
-            <label htmlFor="exp-view-date">Date</label>
-            <input
-              id="exp-view-date"
-              type="date"
-              value={viewDate}
-              disabled={viewAllDates}
-              onChange={(e) => {
-                setViewAllDates(false);
-                setViewDate(e.target.value);
-              }}
-            />
-          </div>
-          <div className="expenses-filter-actions">
-            <button
-              type="button"
-              className={`btn btn-sm ${isViewingToday ? 'btn-primary btn-water' : 'btn-ghost'}`}
-              onClick={showToday}
-            >
+      <div className="customer-toolbar card card-flat">
+        <label className="customer-search" htmlFor="exp-view-date">
+          <span>Date</span>
+          <input
+            id="exp-view-date"
+            type="date"
+            value={viewDate}
+            disabled={viewAllDates}
+            onChange={(e) => {
+              setViewAllDates(false);
+              setViewDate(e.target.value);
+            }}
+          />
+        </label>
+        <div className="customer-filter-group">
+          <span>Show</span>
+          <div className="customer-pills" role="group" aria-label="Expense date filter">
+            <button type="button" className={`customer-pill${isViewingToday ? ' active' : ''}`} onClick={showToday}>
               Today
             </button>
-            <button
-              type="button"
-              className={`btn btn-sm ${viewAllDates ? 'btn-primary btn-water' : 'btn-ghost'}`}
-              onClick={() => setViewAllDates(true)}
-            >
+            <button type="button" className={`customer-pill${viewAllDates ? ' active' : ''}`} onClick={() => setViewAllDates(true)}>
               All dates
             </button>
           </div>
         </div>
-      </div>
-
-      <div className="grid-stats expenses-summary-row">
-        <div className="stat-card">
-          <div className="label">{viewAllDates ? 'Entries shown' : 'Entries this day'}</div>
-          <div className="value">{loading ? '…' : rows.length}</div>
-        </div>
-        <div className="stat-card stat-card--expense">
-          <div className="label">{viewAllDates ? 'Total (shown list)' : 'Total this day'}</div>
-          <div className="value">{loading ? '…' : money(dayTotal)}</div>
+        <div className="expenses-totals">
+          <span>{loading ? '…' : rows.length} entries</span>
+          <strong>{loading ? '…' : money(dayTotal)}</strong>
         </div>
       </div>
 
+      <div className="expenses-board">
       <div className="card card-flat expenses-form-card">
         <h2 className="card-title expenses-section-title">Add expense</h2>
-        <p className="expenses-section-hint">New entry — separate from the date filter above.</p>
         {formError ? <p className="error-text">{formError}</p> : null}
         <form className="expenses-form" onSubmit={(e) => void submit(e)}>
-          <div className="expenses-form-row">
-            <div className="field">
-              <label htmlFor="exp-type">Type</label>
-              <select id="exp-type" value={expenseType} onChange={(e) => setExpenseType(e.target.value as ExpenseType)}>
-                {EXPENSE_TYPES.map((t) => (
-                  <option key={t.value} value={t.value}>
-                    {t.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div className="field">
-              <label htmlFor="exp-amount">Amount (₱)</label>
-              <input
-                id="exp-amount"
-                type="number"
-                min={0.01}
-                step="0.01"
-                placeholder="e.g. 1500.00"
-                value={amount}
-                onChange={(e) => setAmount(e.target.value)}
-                required
-              />
-            </div>
+          <div className="field">
+            <label htmlFor="exp-type">Type</label>
+            <select id="exp-type" value={expenseType} onChange={(e) => setExpenseType(e.target.value as ExpenseType)}>
+              {EXPENSE_TYPES.map((t) => (
+                <option key={t.value} value={t.value}>
+                  {t.label}
+                </option>
+              ))}
+            </select>
+          </div>
+          <div className="field">
+            <label htmlFor="exp-amount">Amount (₱)</label>
+            <input
+              id="exp-amount"
+              type="number"
+              min={0.01}
+              step="0.01"
+              placeholder="1500.00"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+              required
+            />
           </div>
           {expenseType === 'others' ? (
             <div className="field">
@@ -264,26 +233,24 @@ export function ExpensesPage({ variant = 'wrs' }: ExpensesPageProps) {
               />
             </div>
           ) : null}
-          <div className="expenses-form-row">
-            <div className="field">
-              <label htmlFor="exp-date">Expense date</label>
-              <input
-                id="exp-date"
-                type="date"
-                value={expenseDate}
-                onChange={(e) => setExpenseDate(e.target.value)}
-                required
-              />
-            </div>
-            <div className="field">
-              <label htmlFor="exp-notes">Notes (optional)</label>
-              <input
-                id="exp-notes"
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
-                placeholder="Receipt ref, remarks…"
-              />
-            </div>
+          <div className="field">
+            <label htmlFor="exp-date">Expense date</label>
+            <input
+              id="exp-date"
+              type="date"
+              value={expenseDate}
+              onChange={(e) => setExpenseDate(e.target.value)}
+              required
+            />
+          </div>
+          <div className="field">
+            <label htmlFor="exp-notes">Notes (optional)</label>
+            <input
+              id="exp-notes"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="Receipt ref, remarks…"
+            />
           </div>
           <button type="submit" className="btn btn-primary btn-water expenses-form-submit" disabled={saving}>
             {saving ? 'Saving…' : 'Save expense'}
@@ -330,6 +297,7 @@ export function ExpensesPage({ variant = 'wrs' }: ExpensesPageProps) {
             </table>
           </div>
         ) : null}
+      </div>
       </div>
 
       <ConfirmModal

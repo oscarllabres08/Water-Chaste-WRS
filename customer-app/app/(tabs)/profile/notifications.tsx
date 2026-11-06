@@ -116,7 +116,7 @@ function ToggleRow({
         value={value}
         disabled={disabled}
         onValueChange={onChange}
-        trackColor={{ false: 'rgba(10,27,55,0.12)', true: 'rgba(18,101,214,0.35)' }}
+        trackColor={{ false: 'rgba(7,20,46,0.12)', true: 'rgba(0,114,240,0.35)' }}
         thumbColor={value ? theme.colors.primary : '#fff'}
       />
     </View>

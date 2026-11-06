@@ -186,9 +186,12 @@ export default function ProductsScreen() {
           <Animated.View entering={FadeInDown.duration(240)} style={{ gap: theme.spacing.sm }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <View style={{ flex: 1 }}>
-                <Text variant="title" weight="extrabold">
-                  Zoda WRS
-                </Text>
+                <Image
+                  source={require('../../assets/logo.png')}
+                  style={{ width: 168, height: 96 }}
+                  resizeMode="contain"
+                  accessibilityLabel="Water Chaste"
+                />
                 <Text variant="muted" weight="bold" style={{ marginTop: 2 }}>
                   Manage Products
                 </Text>
@@ -315,7 +318,7 @@ export default function ProductsScreen() {
                       width: productThumbSize,
                       height: productThumbSize,
                       borderRadius: 16,
-                      backgroundColor: '#EEF4FF',
+                      backgroundColor: '#E7F4FC',
                       borderWidth: 1,
                       borderColor: theme.colors.border,
                       overflow: 'hidden',
@@ -435,7 +438,7 @@ export default function ProductsScreen() {
                     value={item.is_available}
                     onValueChange={(v) => toggleAvailability(item.id, v)}
                     disabled={updatingId === item.id}
-                    trackColor={{ false: '#D5DCE8', true: 'rgba(18,101,214,0.35)' }}
+                    trackColor={{ false: '#D5DCE8', true: 'rgba(0,114,240,0.35)' }}
                     thumbColor={item.is_available ? theme.colors.primary : '#FFFFFF'}
                   />
                 </View>

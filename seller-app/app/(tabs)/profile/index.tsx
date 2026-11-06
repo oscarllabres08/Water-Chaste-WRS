@@ -57,7 +57,7 @@ export default function ProfileHomeScreen() {
       .single();
     if (pErr) {
       const msg = pErr.message.includes('does not exist')
-        ? `${pErr.message}\n\nRun latest SQL in supabase/schema.sql in Supabase SQL Editor.`
+        ? `${pErr.message}\n\nRun supabase/water-chaste.sql once in the Supabase SQL Editor.`
         : pErr.message;
       setError(msg);
     }
@@ -230,9 +230,9 @@ function MenuRow({ title, icon, onPress }: { title: string; icon: IonIconName; o
           width: 40,
           height: 40,
           borderRadius: 12,
-          backgroundColor: 'rgba(18,101,214,0.08)',
+          backgroundColor: 'rgba(0,114,240,0.08)',
           borderWidth: 1,
-          borderColor: 'rgba(18,101,214,0.12)',
+          borderColor: 'rgba(0,114,240,0.12)',
           alignItems: 'center',
           justifyContent: 'center',
         }}

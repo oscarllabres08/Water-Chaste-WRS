@@ -1,7 +1,7 @@
 import { Platform } from 'react-native';
 
-/** Zoda Water Refilling Station — matches logo & admin web palette */
-const shadowInk = '#03264f';
+/** Water Chaste — sampled from the logo (royal blue, water cyan, leaf green). */
+const shadowInk = '#06215F';
 
 const shadowCard = Platform.select({
   android: {
@@ -22,24 +22,24 @@ const shadowCard = Platform.select({
 
 export const theme = {
   colors: {
-    bg: '#E8F4FC',
-    bgSoft: '#F0F9FF',
-    bgTint: '#D6EDFA',
+    bg: '#F3F8FC',
+    bgSoft: '#F7FBFE',
+    bgTint: '#D7F0FB',
     card: '#FFFFFF',
-    text: '#0A1B37',
-    muted: '#5A7294',
-    border: '#C5DFF0',
-    primary: '#1265D6',
-    primaryDark: '#063A7A',
-    navyDeep: '#03264F',
-    accent: '#3AB1FF',
-    accentBright: '#00AEEF',
+    text: '#07142E',
+    muted: '#5A7090',
+    border: '#C5E6F6',
+    primary: '#0074F0',
+    primaryDark: '#0B3A96',
+    navyDeep: '#06215F',
+    accent: '#00B7F5',
+    accentBright: '#00A8F0',
     danger: '#E5484D',
     warning: '#F59E0B',
-    success: '#39B54A',
-    successBright: '#2ECC71',
+    success: '#2FB84A',
+    successBright: '#3CC24A',
     tabBar: '#FFFFFF',
-    tabInactiveLabel: 'rgba(10, 27, 55, 0.72)',
+    tabInactiveLabel: 'rgba(7, 20, 46, 0.72)',
     onPrimary: '#FFFFFF',
   },
   radius: {
@@ -65,6 +65,6 @@ export const theme = {
     extrabold: 'Nunito_800ExtraBold',
   },
   gradient: {
-    primary: ['#3AB1FF', '#1265D6'] as const,
+    primary: ['#00B7F5', '#0074F0'] as const,
   },
 } as const;
