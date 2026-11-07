@@ -4,9 +4,10 @@ import { useAuth } from '../auth/AuthProvider';
 import { CustomerNameAutocomplete } from '../components/CustomerNameAutocomplete';
 import { BoxIcon, DropIcon } from '../components/UiIcons';
 import { money, publicWrsAssetUrl } from '../lib/format';
-import { recordContainerLend, resolveProfileUserIdForPosName, validateBorrowContainers } from '../lib/containerLend';
+import { recordContainerLend, resolveProfileUserIdForPosName } from '../lib/containerLend';
 import { customerNameKey, loadPosCustomerNames, savePosWalkInCustomer, type PosCustomerOption } from '../lib/posCustomerNames';
 import { isLowStock, stockLabel, tracksStock } from '../lib/inventoryStock';
+import { awardPosSaleLoyalty } from '../lib/loyaltyProgram';
 import { type PosPaymentMethod } from '../lib/posPayment';
 import { supabase } from '../lib/supabase';
 
@@ -18,6 +19,7 @@ type ProductRow = {
   category: 'water' | 'other';
   stock_quantity: number | null;
   image_url?: string | null;
+  earn_loyalty_points?: boolean;
 };
 
 type CartLine = {
@@ -46,9 +48,9 @@ type PosDraft = {
   customerName: string;
   paymentMethod: PosPaymentMethod;
   cashReceived: string;
-  borrowContainers: boolean;
-  borrowQty: string;
-  borrowCodes: string;
+  borrowOpen: boolean;
+  borrowDraft: string;
+  addLoyalty: boolean;
 };
 
 function posDraftKey(businessId: string) {
@@ -72,8 +74,9 @@ function writePosDraft(businessId: string, draft: PosDraft) {
     draft.cart.length === 0 &&
     !draft.customerName.trim() &&
     !draft.cashReceived.trim() &&
-    !draft.borrowContainers &&
-    !draft.borrowCodes.trim();
+    !draft.borrowOpen &&
+    !draft.borrowDraft.trim() &&
+    !draft.addLoyalty;
   if (empty) {
     sessionStorage.removeItem(posDraftKey(businessId));
     return;
@@ -101,9 +104,11 @@ export function PosPage() {
   const [customerNameOptions, setCustomerNameOptions] = useState<PosCustomerOption[]>([]);
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>('cash');
   const [cashReceived, setCashReceived] = useState('');
-  const [borrowContainers, setBorrowContainers] = useState(false);
-  const [borrowQty, setBorrowQty] = useState('1');
-  const [borrowCodes, setBorrowCodes] = useState('');
+  const [borrowOpen, setBorrowOpen] = useState(false);
+  const [borrowCode, setBorrowCode] = useState('');
+  const [borrowSaving, setBorrowSaving] = useState(false);
+  const [borrowedAdded, setBorrowedAdded] = useState<string[]>([]);
+  const [addLoyalty, setAddLoyalty] = useState(false);
   const [addedNote, setAddedNote] = useState<string | null>(null);
   const [addedFlashId, setAddedFlashId] = useState<string | null>(null);
   const lastSavedCustomerKey = useRef('');
@@ -119,7 +124,7 @@ export function PosPage() {
     setLoading(true);
     const { data, error: err } = await supabase
       .from('products')
-      .select('id,name,price,is_available,category,stock_quantity,image_url')
+      .select('id,name,price,is_available,category,stock_quantity,image_url,earn_loyalty_points')
       .eq('seller_id', businessId)
       .eq('is_available', true)
       .order('sort_order', { ascending: true });
@@ -142,9 +147,9 @@ export function PosPage() {
       setCustomerName(draft.customerName ?? '');
       setPaymentMethod(draft.paymentMethod === 'gcash' ? 'gcash' : 'cash');
       setCashReceived(draft.cashReceived ?? '');
-      setBorrowContainers(Boolean(draft.borrowContainers));
-      setBorrowQty(draft.borrowQty || '1');
-      setBorrowCodes(draft.borrowCodes ?? '');
+      setBorrowOpen(Boolean(draft.borrowOpen));
+      setBorrowCode(draft.borrowDraft ?? '');
+      setAddLoyalty(Boolean(draft.addLoyalty));
     }
     skipDraftSave.current = true;
   }, [businessId]);
@@ -160,11 +165,11 @@ export function PosPage() {
       customerName,
       paymentMethod,
       cashReceived,
-      borrowContainers,
-      borrowQty,
-      borrowCodes,
+      borrowOpen,
+      borrowDraft: borrowCode,
+      addLoyalty,
     });
-  }, [businessId, cart, customerName, paymentMethod, cashReceived, borrowContainers, borrowQty, borrowCodes]);
+  }, [businessId, cart, customerName, paymentMethod, cashReceived, borrowOpen, borrowCode, addLoyalty]);
 
   useEffect(() => {
     void loadProducts();
@@ -202,6 +207,14 @@ export function PosPage() {
 
   const cartCount = useMemo(() => cart.reduce((s, l) => s + l.quantity, 0), [cart]);
   const cartTotal = useMemo(() => cart.reduce((s, l) => s + l.unitPrice * l.quantity, 0), [cart]);
+  const loyaltyPoints = useMemo(
+    () =>
+      cart.reduce((sum, line) => {
+        const product = products.find((item) => item.id === line.productId);
+        return sum + (product?.earn_loyalty_points ? line.quantity : 0);
+      }, 0),
+    [cart, products]
+  );
   const cashNum = Number(cashReceived);
   const change = Number.isFinite(cashNum) && cashNum >= cartTotal ? cashNum - cartTotal : 0;
 
@@ -271,9 +284,10 @@ export function PosPage() {
     setCustomerName('');
     lastSavedCustomerKey.current = '';
     setPaymentMethod('cash');
-    setBorrowContainers(false);
-    setBorrowQty('1');
-    setBorrowCodes('');
+    setBorrowOpen(false);
+    setBorrowCode('');
+    setBorrowedAdded([]);
+    setAddLoyalty(false);
     setSuccess(null);
   }
 
@@ -295,6 +309,47 @@ export function PosPage() {
     await loadCustomerNames();
   }
 
+  async function addBorrowedContainer() {
+    if (!businessId || borrowSaving) return;
+    const displayName = customerName.trim().replace(/\s+/g, ' ');
+    const code = borrowCode.trim().replace(/\s+/g, ' ');
+    if (!displayName) {
+      setError('Enter the customer name before adding a borrowed container.');
+      return;
+    }
+    if (!code) {
+      setError('Enter a container code or description.');
+      return;
+    }
+    setBorrowSaving(true);
+    setError(null);
+    try {
+      const saved = await savePosWalkInCustomer(businessId, displayName);
+      if (!saved.ok) {
+        setError(saved.message ?? 'Could not save this customer.');
+        return;
+      }
+      lastSavedCustomerKey.current = customerNameKey(displayName);
+      const profileUserId = resolveProfileUserIdForPosName(displayName, customerNameOptions);
+      const lendRes = await recordContainerLend(supabase, {
+        customerName: displayName,
+        profileUserId,
+        quantity: 1,
+        containerNumbers: code,
+      });
+      if (!lendRes.ok) {
+        setError(lendRes.message);
+        return;
+      }
+      setBorrowedAdded((prev) => [...prev, code]);
+      setBorrowCode('');
+      setSuccess(`${code} recorded as borrowed for ${displayName}.`);
+      await loadCustomerNames();
+    } finally {
+      setBorrowSaving(false);
+    }
+  }
+
   async function submitSale(paymentSettled: boolean) {
     if (!businessId || cart.length === 0) return;
 
@@ -303,23 +358,9 @@ export function PosPage() {
       return;
     }
 
-    let borrowPlan: { quantity: number; containerNumbers: string | null } | null = null;
-    if (borrowContainers) {
-      if (!customerName.trim()) {
-        setError('Customer name is required when recording borrowed containers.');
-        return;
-      }
-      const qty = Number.parseInt(borrowQty, 10);
-      if (!Number.isFinite(qty) || qty < 1) {
-        setError('Enter borrow quantity (at least 1).');
-        return;
-      }
-      const validated = validateBorrowContainers(qty, borrowCodes);
-      if (!validated.ok) {
-        setError(validated.message);
-        return;
-      }
-      borrowPlan = { quantity: qty, containerNumbers: validated.containerNumbers };
+    if (addLoyalty && !customerName.trim()) {
+      setError('Enter the customer name so the loyalty points can be saved.');
+      return;
     }
 
     if (paymentSettled) {
@@ -382,16 +423,19 @@ export function PosPage() {
         }
       }
 
-      if (borrowPlan) {
+      let loyaltyNote = '';
+      if (addLoyalty && trimmedName) {
         const profileUserId = resolveProfileUserIdForPosName(trimmedName, customerNameOptions);
-        const lendRes = await recordContainerLend(supabase, {
-          customerName: trimmedName,
-          profileUserId,
-          quantity: borrowPlan.quantity,
-          containerNumbers: borrowPlan.containerNumbers,
-          posSaleId: saleId,
-        });
-        if (!lendRes.ok) throw new Error(lendRes.message);
+        const awarded = await awardPosSaleLoyalty(saleId, profileUserId);
+        if (!awarded.ok) {
+          loyaltyNote = ` Sale saved, but points were not added. ${awarded.message}`;
+        } else if (awarded.points > 0) {
+          loyaltyNote = awarded.linkedApp
+            ? ` ${awarded.points} loyalty point${awarded.points === 1 ? '' : 's'} added to their app account (${awarded.balance} total).`
+            : ` ${awarded.points} loyalty point${awarded.points === 1 ? '' : 's'} saved on the Loyalty page (${awarded.balance} total). No app account.`;
+        } else {
+          loyaltyNote = ' No points added. Mark the product to earn points in Inventory.';
+        }
       }
 
       await loadProducts();
@@ -399,14 +443,10 @@ export function PosPage() {
       clearCart();
       const who = trimmedName ? `${trimmedName} · ` : '';
       const payLabel = paymentMethod === 'gcash' ? 'GCash' : 'Cash';
-      const borrowNote =
-        borrowPlan != null
-          ? ` ${borrowPlan.quantity} container(s) recorded as borrowed${borrowPlan.containerNumbers ? ` (${borrowPlan.containerNumbers}).` : '.'}`
-          : '';
       setSuccess(
         paymentSettled
-          ? `${who}Paid ${payLabel} sale recorded.${changeDue != null && changeDue > 0 ? ` Change: ${money(changeDue)}.` : ''}${borrowNote}`
-          : `${who}Unpaid ${payLabel} sale recorded.${trimmedName ? ' Customer added to list.' : ''}${borrowNote}`
+          ? `${who}Paid ${payLabel} sale recorded.${changeDue != null && changeDue > 0 ? ` Change: ${money(changeDue)}.` : ''}${loyaltyNote}`
+          : `${who}Unpaid ${payLabel} sale recorded.${trimmedName ? ' Customer added to list.' : ''}${loyaltyNote}`
       );
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed to save sale');
@@ -602,37 +642,65 @@ export function PosPage() {
               <label className="pos-borrow-toggle">
                 <input
                   type="checkbox"
-                  checked={borrowContainers}
-                  onChange={(e) => setBorrowContainers(e.target.checked)}
+                  checked={addLoyalty}
+                  onChange={(e) => setAddLoyalty(e.target.checked)}
                 />
-                <span>Add borrowed container (optional)</span>
+                <span>Add loyalty points to this order</span>
               </label>
-              {borrowContainers ? (
-                <div className="pos-borrow-fields">
-                  <label className="field pos-borrow-qty">
-                    <span className="pos-cash-label">Quantity</span>
-                    <input
-                      type="number"
-                      min={1}
-                      step={1}
-                      value={borrowQty}
-                      onChange={(e) => setBorrowQty(e.target.value)}
-                    />
-                  </label>
-                  <label className="field pos-borrow-codes">
-                    <span className="pos-cash-label">Container codes</span>
+              {addLoyalty ? (
+                <p className="field-hint pos-customer-hint">
+                  {customerName.trim()
+                    ? loyaltyPoints > 0
+                      ? `Adds ${loyaltyPoints} point${loyaltyPoints === 1 ? '' : 's'} for ${customerName.trim()}. App customers see it on their account. Walk-in customers are saved on the Loyalty page.`
+                      : 'None of these products earn points yet. Mark them in Inventory.'
+                    : 'Enter the customer name first so the points can be recorded.'}
+                </p>
+              ) : null}
+            </div>
+
+            <div className="pos-borrow-block">
+              {borrowOpen ? (
+                <>
+                  <div className="pos-borrow-add-row">
                     <input
                       type="text"
-                      placeholder="e.g. Con001, Con002"
-                      value={borrowCodes}
-                      onChange={(e) => setBorrowCodes(e.target.value)}
+                      placeholder="Container code or description"
+                      value={borrowCode}
+                      disabled={borrowSaving}
+                      onChange={(e) => setBorrowCode(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          void addBorrowedContainer();
+                        }
+                      }}
+                      aria-label="Container code or description"
                     />
-                  </label>
+                    <button
+                      type="button"
+                      className="btn btn-primary btn-sm"
+                      disabled={borrowSaving}
+                      onClick={() => void addBorrowedContainer()}
+                    >
+                      {borrowSaving ? 'Adding…' : 'Add'}
+                    </button>
+                  </div>
                   <p className="field-hint pos-customer-hint">
-                    Requires customer name. Codes are optional but must match quantity when provided.
+                    Customer name is required. Add records it right away. The field stays open so you can add more.
                   </p>
-                </div>
-              ) : null}
+                  {borrowedAdded.length > 0 ? (
+                    <ul className="pos-borrow-added">
+                      {borrowedAdded.map((code, index) => (
+                        <li key={`${code}-${index}`}>{code} recorded</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                </>
+              ) : (
+                <button type="button" className="btn btn-ghost btn-sm" onClick={() => setBorrowOpen(true)}>
+                  Add borrowed container
+                </button>
+              )}
             </div>
 
           <div className="pos-checkout-section">

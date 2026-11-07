@@ -26,9 +26,12 @@ const FREE_REFILL_POINTS = 10;
 const CLOSE_LIMIT = 8;
 
 type LoyaltyCustomer = {
-  customerId: string;
+  key: string;
+  customerId: string | null;
+  nameKey: string | null;
   name: string;
   points: number;
+  source: 'app' | 'walkin';
 };
 
 type VerifyUiState =
@@ -150,12 +153,39 @@ export function LoyaltyPage() {
         names.set(row.user_id, row.display_name?.trim() || 'Customer');
       }
     }
+    const appCustomers: LoyaltyCustomer[] = rows.map((row) => ({
+      key: `app:${row.customer_id}`,
+      customerId: row.customer_id,
+      nameKey: null,
+      name: names.get(row.customer_id) || 'Customer',
+      points: row.points_balance,
+      source: 'app',
+    }));
+
+    const { data: walkInData, error: walkErr } = await supabase
+      .from('pos_loyalty_balances')
+      .select('customer_name_key, display_name, points_balance')
+      .eq('seller_id', businessId)
+      .gt('points_balance', 0)
+      .order('points_balance', { ascending: false });
+    if (walkErr && !walkErr.message.includes('pos_loyalty_balances') && walkErr.code !== 'PGRST205') {
+      setError(walkErr.message);
+    }
+    const walkIns: LoyaltyCustomer[] = walkErr
+      ? []
+      : ((walkInData ?? []) as { customer_name_key: string; display_name: string; points_balance: number }[]).map(
+          (row) => ({
+            key: `walkin:${row.customer_name_key}`,
+            customerId: null,
+            nameKey: row.customer_name_key,
+            name: row.display_name?.trim() || 'Walk-in',
+            points: row.points_balance,
+            source: 'walkin',
+          })
+        );
+
     setCustomers(
-      rows.map((row) => ({
-        customerId: row.customer_id,
-        name: names.get(row.customer_id) || 'Customer',
-        points: row.points_balance,
-      }))
+      [...appCustomers, ...walkIns].sort((a, b) => b.points - a.points || a.name.localeCompare(b.name))
     );
     setCustomersLoading(false);
   }, [businessId]);
@@ -172,6 +202,11 @@ export function LoyaltyPage() {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'loyalty_balances', filter: `seller_id=eq.${businessId}` },
+        () => void loadCustomers()
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'pos_loyalty_balances', filter: `seller_id=eq.${businessId}` },
         () => void loadCustomers()
       )
       .subscribe();
@@ -223,15 +258,22 @@ export function LoyaltyPage() {
     setGiveBusy(true);
     setError(null);
     setGiveNotice(null);
-    const { data, error: rpcError } = await supabase.rpc('seller_give_free_refill', {
-      p_customer_id: giveTarget.customerId,
-    });
+    const { data, error: rpcError } = giveTarget.source === 'walkin'
+      ? await supabase.rpc('seller_give_walkin_free_refill', {
+          p_customer_name_key: giveTarget.nameKey,
+        })
+      : await supabase.rpc('seller_give_free_refill', {
+          p_customer_id: giveTarget.customerId,
+        });
     const result = data as { ok?: boolean; message?: string; points_remaining?: number; error?: string } | null;
     if (rpcError || result?.ok === false) {
-      const missing = rpcError?.message?.includes('seller_give_free_refill');
+      const missing =
+        rpcError?.message?.includes('seller_give_free_refill') ||
+        rpcError?.message?.includes('seller_give_walkin_free_refill') ||
+        rpcError?.message?.includes('schema cache');
       setError(
         missing
-          ? 'Run the latest seller_give_free_refill function from supabase/water-chaste.sql in Supabase, then try again.'
+          ? 'Run supabase/pos-loyalty.sql once in the Supabase SQL Editor, then try again.'
           : result?.message || rpcError?.message || 'Could not give the free refill.'
       );
       setGiveBusy(false);
@@ -384,8 +426,11 @@ export function LoyaltyPage() {
           <summary>About the program</summary>
           <p className="muted-block loyalty-settings-desc">
             When <strong>Active</strong>, delivered online orders can earn points on products you mark in Inventory.
-            Customers can redeem vouchers (10 points = 1 free refill code). When <strong>Off</strong>, no new points
-            are awarded and redemption is paused — existing voucher codes still work at the store.
+            POS can also add points when you check “Add loyalty points to this order” and enter the customer name.
+            10 points = 1 free refill. App customers can still redeem a voucher. Walk-in customers are listed here,
+            and you give the refill from this page — no voucher needed. When <strong>Off</strong>, online earning pauses.
+            Existing voucher codes still work. When <strong>Off</strong>, online earning pauses.
+            Existing voucher codes still work.
           </p>
         </details>
 
@@ -448,7 +493,8 @@ export function LoyaltyPage() {
           <ul className="loyalty-help-list">
             <li>Turn the program Active during promos or ongoing loyalty.</li>
             <li>In Inventory, mark products that earn points.</li>
-            <li>1 delivered unit = 1 point. 10 points = 1 free refill.</li>
+            <li>1 delivered unit, or 1 POS unit when the loyalty box is checked, = 1 point.</li>
+            <li>10 points = 1 free refill. Give it here. The 10 points are then removed.</li>
           </ul>
         </details>
       </div>
@@ -458,7 +504,8 @@ export function LoyaltyPage() {
       <div className="card card-flat loyalty-customers-card">
         <h2 className="inventory-section-title">Free refill</h2>
         <p className="muted-block loyalty-settings-desc">
-          10 points = 1 free refill. Customers at 10 or more are highlighted. Give the refill here and those 10 points are used.
+          10 points = 1 free refill. Customers at 10 or more are listed here, including walk-ins with no app.
+          Give the refill and those 10 points are removed. No voucher is required for this button.
         </p>
         {giveNotice ? <p className="loyalty-give-notice">{giveNotice}</p> : null}
         {customersLoading ? <p className="muted-block">Loading customers…</p> : null}
@@ -470,14 +517,17 @@ export function LoyaltyPage() {
         {ready.length > 0 ? (
           <ul className="loyalty-customer-list">
             {ready.map((row) => (
-              <li key={row.customerId} className="loyalty-customer loyalty-customer--ready">
+              <li key={row.key} className="loyalty-customer loyalty-customer--ready">
                 <div>
                   <strong>{row.name}</strong>
-                  <small>Ready for 1 free refill</small>
+                  <small>
+                    Ready for 1 free refill
+                    {row.source === 'walkin' ? ' · Walk-in, no app' : ' · App account'}
+                  </small>
                 </div>
                 <span className="loyalty-points-pill">{row.points} pts</span>
                 <button type="button" className="btn btn-primary btn-sm" onClick={() => setGiveTarget(row)}>
-                  Give free refill
+                  Give 1 free refill
                 </button>
               </li>
             ))}
@@ -489,10 +539,13 @@ export function LoyaltyPage() {
             <h3 className="loyalty-close-title">Close to a free refill</h3>
             <ul className="loyalty-customer-list">
               {close.map((row) => (
-                <li key={row.customerId} className="loyalty-customer">
+                <li key={row.key} className="loyalty-customer">
                   <div>
                     <strong>{row.name}</strong>
-                    <small>{FREE_REFILL_POINTS - row.points} point{FREE_REFILL_POINTS - row.points === 1 ? '' : 's'} to go</small>
+                    <small>
+                      {FREE_REFILL_POINTS - row.points} point{FREE_REFILL_POINTS - row.points === 1 ? '' : 's'} to go
+                      {row.source === 'walkin' ? ' · Walk-in, no app' : ' · App account'}
+                    </small>
                   </div>
                   <span className="loyalty-points-pill loyalty-points-pill--close">{row.points} / {FREE_REFILL_POINTS}</span>
                 </li>
@@ -506,7 +559,7 @@ export function LoyaltyPage() {
 
       <ConfirmModal
         open={giveTarget != null}
-        title="Give free refill?"
+        title="Are you sure?"
         message={
           giveTarget ? (
             <>
@@ -514,10 +567,11 @@ export function LoyaltyPage() {
               {giveTarget.points - FREE_REFILL_POINTS > 0
                 ? ` and leaves ${giveTarget.points - FREE_REFILL_POINTS}.`
                 : ' and sets the balance back to 0.'}
+              {giveTarget.source === 'walkin' ? ' No voucher is needed.' : ''}
             </>
           ) : null
         }
-        confirmLabel="Give free refill"
+        confirmLabel="Give 1 free refill"
         busy={giveBusy}
         onCancel={() => {
           if (!giveBusy) setGiveTarget(null);

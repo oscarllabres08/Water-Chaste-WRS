@@ -3335,6 +3335,53 @@ input[type='number']::-webkit-inner-spin-button {
   gap: 8px;
 }
 
+.pos-borrow-add-row {
+  display: flex;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.pos-borrow-add-row input {
+  flex: 1;
+  min-width: 0;
+  box-sizing: border-box;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  font: inherit;
+  font-weight: 600;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.pos-borrow-add-row input::placeholder {
+  color: var(--placeholder);
+  font-weight: 600;
+}
+
+.pos-borrow-add-row input:focus {
+  outline: none;
+  border-color: var(--primary);
+}
+
+.pos-borrow-add-row .btn {
+  flex-shrink: 0;
+  border-radius: 12px;
+  padding: 10px 16px;
+  white-space: nowrap;
+}
+
+.pos-borrow-added {
+  list-style: none;
+  margin: 8px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 13px;
+  font-weight: 700;
+}
+
 .pos-borrow-qty input {
   max-width: 88px;
 }
@@ -3432,10 +3479,11 @@ input[type='number']::-webkit-inner-spin-button {
   }
 
   .customer-list-table td:last-child {
-    display: block;
+    display: flex;
+    justify-content: flex-end;
     width: auto;
     white-space: normal;
-    text-align: left;
+    text-align: right;
     padding-top: 10px;
   }
 
@@ -3447,6 +3495,64 @@ input[type='number']::-webkit-inner-spin-button {
   .customer-list-table .row-actions .btn {
     flex: 1;
   }
+}
+
+.row-menu {
+  display: inline-flex;
+  justify-content: flex-end;
+}
+
+.row-menu-trigger {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text);
+  font-size: 18px;
+  font-weight: 900;
+  letter-spacing: 1px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.row-menu-trigger:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+}
+
+.row-menu-panel {
+  position: fixed;
+  z-index: 40;
+  min-width: 168px;
+  padding: 6px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  box-shadow: 0 12px 32px rgba(6, 33, 95, 0.18);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row-menu-panel button {
+  text-align: left;
+  background: transparent;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.row-menu-panel button:hover {
+  background: rgba(0, 116, 240, 0.1);
+}
+
+.row-menu-panel button.danger {
+  color: #e5484d;
 }
 
 .customer-list-name-cell {
@@ -8193,6 +8299,74 @@ input[type='number']::-webkit-inner-spin-button {
   display: grid;
   gap: 8px;
   margin-bottom: 14px;
+}
+
+.container-return {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  width: 100%;
+}
+
+.container-return-list {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.container-return-desc {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--text);
+  word-break: break-word;
+}
+
+.container-return-picks {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.container-return-pick {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1.5px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.container-return-pick.is-on {
+  border-color: var(--primary);
+  background: rgba(0, 116, 240, 0.12);
+}
+
+.container-return-open {
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.container-return-modal-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 0 16px 16px;
+}
+
+.container-return-modal-actions .btn {
+  width: 100%;
 }
 
 .containers-toolbar {

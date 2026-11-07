@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 
 import { ConfirmModal } from '../components/ConfirmModal';
 import { ContainerReturnPanel } from '../components/ContainerReturnPanel';
+import { CustomerRowMenu } from '../components/CustomerRowMenu';
 import { PageHeader } from '../components/PageHeader';
 import { useAuth } from '../auth/AuthProvider';
 import { money, publicWrsAssetUrl } from '../lib/format';
@@ -876,17 +877,11 @@ export function CustomersPage() {
                     />
                   </td>
                   <td>
-                    <div className="row-actions">
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => setDetailsFor(r)}>
-                        Details
-                      </button>
-                      <button type="button" className="btn btn-ghost btn-sm" onClick={() => void openHistory(r)}>
-                        Order history
-                      </button>
-                      <button type="button" className="btn btn-danger btn-sm" onClick={() => setRemoveTarget(r)}>
-                        Remove
-                      </button>
-                    </div>
+                    <CustomerRowMenu
+                      onDetails={() => setDetailsFor(r)}
+                      onHistory={() => void openHistory(r)}
+                      onRemove={() => setRemoveTarget(r)}
+                    />
                   </td>
                 </tr>
                 );

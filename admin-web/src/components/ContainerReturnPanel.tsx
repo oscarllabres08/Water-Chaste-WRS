@@ -31,6 +31,7 @@ export function ContainerReturnPanel({
   onError,
 }: Props) {
   const [selected, setSelected] = useState<Set<string>>(() => new Set());
+  const [modalOpen, setModalOpen] = useState(false);
 
   const parsedIds = useMemo(() => parseContainerIds(identifierNotes), [identifierNotes]);
   const labels = useMemo(
@@ -75,50 +76,99 @@ export function ContainerReturnPanel({
         return;
       }
       setSelected(new Set());
+      setModalOpen(false);
       onSuccess();
     } finally {
       onBusyChange(false);
     }
   }
 
+  function openModal() {
+    setSelected(new Set());
+    setModalOpen(true);
+  }
+
+  const selectedLabels = Array.from(selected);
+
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 8, alignItems: 'flex-start', maxWidth: 220 }}>
-      <span className="chip pending">{outstanding} borrowed</span>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-        {labels.map((label) => {
-          const isOn = selected.has(label);
-          return (
-            <button
-              key={label}
-              type="button"
-              className={isOn ? 'btn btn-primary btn-sm' : 'btn btn-ghost btn-sm'}
-              disabled={busy}
-              onClick={() => toggle(label)}
-            >
-              <CheckBoxIcon checked={isOn} />
-              {label}
-            </button>
-          );
-        })}
-      </div>
-      {selected.size > 0 ? (
+    <>
+      <div className="container-return">
+        <span className="chip pending">{outstanding} borrowed</span>
         <button
           type="button"
-          className="btn btn-primary btn-sm"
+          className="btn btn-primary btn-sm container-return-open"
           disabled={busy}
-          onClick={() => void runReturn(selected.size, Array.from(selected))}
+          onClick={openModal}
         >
-          {busy ? 'Saving…' : `Return selected (${selected.size})`}
+          {busy ? 'Saving…' : 'Return'}
         </button>
+      </div>
+
+      {modalOpen ? (
+        <div
+          className="modal-backdrop"
+          role="presentation"
+          onClick={() => {
+            if (!busy) setModalOpen(false);
+          }}
+        >
+          <div
+            className="modal-card confirm-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="container-return-title"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="confirm-modal-body">
+              <h2 id="container-return-title" className="confirm-modal-title">
+                Return containers
+              </h2>
+              <p className="confirm-modal-message">
+                Select which borrowed container{labels.length === 1 ? '' : 's'} to return for {customerName}.
+              </p>
+              <div className="container-return-picks">
+                {labels.map((label) => {
+                  const isOn = selected.has(label);
+                  const shown = label.startsWith('#') ? `Container ${label.slice(1)}` : label;
+                  return (
+                    <button
+                      key={label}
+                      type="button"
+                      className={`container-return-pick${isOn ? ' is-on' : ''}`}
+                      disabled={busy}
+                      onClick={() => toggle(label)}
+                    >
+                      <CheckBoxIcon checked={isOn} />
+                      <span>{shown}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="container-return-modal-actions">
+              <button
+                type="button"
+                className="btn btn-primary btn-sm"
+                disabled={busy || selectedLabels.length < 1}
+                onClick={() => void runReturn(selectedLabels.length, selectedLabels)}
+              >
+                {busy ? 'Saving…' : `Return selected${selectedLabels.length > 0 ? ` (${selectedLabels.length})` : ''}`}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                disabled={busy}
+                onClick={() => void runReturn(outstanding, labels)}
+              >
+                Return all
+              </button>
+              <button type="button" className="btn btn-ghost btn-sm" disabled={busy} onClick={() => setModalOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
       ) : null}
-      <button
-        type="button"
-        className={selected.size > 0 ? 'btn btn-ghost btn-sm' : 'btn btn-primary btn-sm'}
-        disabled={busy}
-        onClick={() => void runReturn(outstanding, labels)}
-      >
-        {busy ? 'Saving…' : 'Returned all'}
-      </button>
-    </div>
+    </>
   );
 }
