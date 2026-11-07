@@ -6,7 +6,7 @@ const PLACEHOLDER_BY_LABEL: Record<string, string> = {
   'Phone number': '09xx xxx xxxx',
   Address: 'House no., street, barangay, city',
   'Store address': 'House no., street, barangay, city',
-  'Store name': 'Zoda WRS',
+  'Store name': 'Water Chaste',
   'Business hours': '8:00 AM - 8:00 PM',
   Password: 'Enter your password',
   'Current password': 'Enter current password',

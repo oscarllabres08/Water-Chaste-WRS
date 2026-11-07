@@ -3,7 +3,6 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/AuthProvider';
 import {
   fetchStaleUnviewedPendingOrders,
-  requestPendingOrderReminders,
   type StalePendingOrder,
 } from '../lib/pendingOrderReminder';
 import { getBannerSnoozeUntil, snoozeBanner } from '../lib/pendingReminderSnooze';
@@ -27,10 +26,6 @@ export function usePendingOrderReminder(businessId: string | null) {
     const viewed = getViewedOrderIds(businessId);
     const stale = await fetchStaleUnviewedPendingOrders(businessId, viewed);
     setStaleOrders(stale);
-    const snoozed = until > Date.now();
-    if (stale.length > 0 && !snoozed) {
-      await requestPendingOrderReminders(stale.map((o) => o.id));
-    }
   }, [businessId, scopeId]);
 
   const dismissBanner = useCallback(() => {

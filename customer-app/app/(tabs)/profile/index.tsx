@@ -80,14 +80,28 @@ export default function ProfileIndexScreen() {
       .maybeSingle();
     if (pErr) setErr(pErr.message);
     const p = (prof ?? null) as ProfileRow | null;
-    setProfile(p);
 
-    const nextName = (p?.display_name ?? '').trim();
-    const nextPhone = (p?.phone ?? '').trim();
+    const nextName = (p?.display_name ?? '').trim().replace(/\s+/g, ' ');
+    let nextPhone = (p?.phone ?? '').trim();
+    if (!nextPhone) {
+      const { data: lastOrder } = await supabase
+        .from('orders')
+        .select('contact_number')
+        .eq('customer_id', userId)
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+      nextPhone = (lastOrder?.contact_number ?? '').trim();
+      if (nextPhone && p) {
+        p.phone = nextPhone;
+        await supabase.from('profiles').update({ phone: nextPhone }).eq('user_id', userId);
+      }
+    }
+    setProfile(p);
     const nextAddr = (p?.address ?? '').trim();
-    setName((prev) => (prev.trim() ? prev : nextName));
-    setPhone((prev) => (prev.trim() ? prev : nextPhone));
-    setAddress((prev) => (prev.trim() ? prev : nextAddr));
+    setName(nextName);
+    setPhone(nextPhone);
+    setAddress(nextAddr);
     setCoords(p?.latitude != null && p?.longitude != null ? { latitude: p.latitude, longitude: p.longitude } : null);
     setAvatarPath(p?.avatar_path ?? null);
 
@@ -124,20 +138,35 @@ export default function ProfileIndexScreen() {
     setErr(null);
     setSavedMsg(null);
     setSaving(true);
-    const { error } = await supabase
+    const savedName = name.trim().replace(/\s+/g, ' ');
+    const savedPhone = phone.trim();
+    const { data, error } = await supabase
       .from('profiles')
       .update({
-        display_name: name.trim() ? name.trim() : null,
-        phone: phone.trim() ? phone.trim() : null,
+        display_name: savedName || null,
+        phone: savedPhone || null,
         address: address.trim() ? address.trim() : null,
         latitude: coords?.latitude ?? null,
         longitude: coords?.longitude ?? null,
         avatar_path: avatarPath ?? null,
       })
-      .eq('user_id', user.id);
-    await load();
-    if (error) setErr(error.message);
-    else {
+      .eq('user_id', user.id)
+      .select('display_name,username,phone,address,latitude,longitude,avatar_path')
+      .maybeSingle();
+    if (error || !data) {
+      setErr(error?.message || 'Could not save your profile. Try again.');
+    } else {
+      const saved = data as ProfileRow;
+      setProfile(saved);
+      setName((saved.display_name ?? '').trim().replace(/\s+/g, ' '));
+      setPhone((saved.phone ?? '').trim());
+      setAddress((saved.address ?? '').trim());
+      setCoords(
+        saved.latitude != null && saved.longitude != null
+          ? { latitude: saved.latitude, longitude: saved.longitude }
+          : null
+      );
+      setAvatarPath(saved.avatar_path ?? null);
       setErr(null);
       setSavedMsg('Saved successfully.');
     }
@@ -383,23 +412,42 @@ export default function ProfileIndexScreen() {
                       </View>
                     </Pressable>
 
-                    <View style={{ flex: 1 }}>
-                      <Text weight="semibold" style={{ fontSize: 20, lineHeight: 24 }}>
-                        {name.trim() || 'Customer'}
+                    <View style={{ flex: 1, minWidth: 0 }}>
+                      <Text weight="semibold" style={{ fontSize: 18, lineHeight: 24 }}>
+                        {name.trim().replace(/\s+/g, ' ') || 'Customer'}
                       </Text>
-                      <View
-                        style={{
-                          alignSelf: 'flex-start',
-                          marginTop: 6,
-                          paddingHorizontal: 8,
-                          paddingVertical: 3,
-                          borderRadius: 999,
-                          backgroundColor: 'rgba(255,255,255,0.8)',
-                        }}
-                      >
-                        <Text variant="chip" style={{ color: theme.colors.primaryDark }}>
-                          @{usernameFromAccount(profile?.username, user.email) || 'username'}
-                        </Text>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', marginTop: 6, gap: 8 }}>
+                        <View
+                          style={{
+                            flexShrink: 1,
+                            paddingHorizontal: 8,
+                            paddingVertical: 3,
+                            borderRadius: 999,
+                            backgroundColor: 'rgba(255,255,255,0.8)',
+                          }}
+                        >
+                          <Text variant="chip" numberOfLines={1} style={{ color: theme.colors.primaryDark }}>
+                            @{usernameFromAccount(profile?.username, user.email) || 'username'}
+                          </Text>
+                        </View>
+                        <Pressable
+                          onPress={() => {
+                            setErr(null);
+                            setSavedMsg(null);
+                            setEditing((v) => !v);
+                          }}
+                          style={{
+                            marginLeft: 'auto',
+                            paddingHorizontal: 12,
+                            paddingVertical: 7,
+                            borderRadius: 999,
+                            backgroundColor: '#fff',
+                          }}
+                        >
+                          <Text weight="semibold" style={{ color: theme.colors.primary, fontSize: 13 }}>
+                            {editing ? 'Done' : 'Edit'}
+                          </Text>
+                        </Pressable>
                       </View>
                       <Pressable
                         accessibilityRole="button"
@@ -413,24 +461,6 @@ export default function ProfileIndexScreen() {
                         </Text>
                       </Pressable>
                     </View>
-
-                    <Pressable
-                      onPress={() => {
-                        setErr(null);
-                        setSavedMsg(null);
-                        setEditing((v) => !v);
-                      }}
-                      style={{
-                        paddingHorizontal: 12,
-                        paddingVertical: 7,
-                        borderRadius: 999,
-                        backgroundColor: '#fff',
-                      }}
-                    >
-                      <Text weight="semibold" style={{ color: theme.colors.primary, fontSize: 13 }}>
-                        {editing ? 'Done' : 'Edit'}
-                      </Text>
-                    </Pressable>
                   </View>
 
                   {!editing && (err || savedMsg) ? (
@@ -576,19 +606,33 @@ export default function ProfileIndexScreen() {
               onPress={() => !loggingOut && setLogoutModalOpen(true)}
               disabled={loggingOut}
               style={{
-                alignSelf: 'center',
                 marginTop: theme.spacing.md,
-                paddingVertical: 8,
-                paddingHorizontal: 18,
-                borderRadius: 999,
+                flexDirection: 'row',
+                alignItems: 'center',
+                gap: 12,
+                paddingVertical: 12,
+                paddingHorizontal: 14,
+                borderRadius: 12,
                 borderWidth: 1,
-                borderColor: 'rgba(229,72,77,0.35)',
-                backgroundColor: 'rgba(229,72,77,0.06)',
+                borderColor: 'rgba(229,72,77,0.28)',
+                backgroundColor: '#fff',
                 opacity: loggingOut ? 0.6 : 1,
               }}
             >
-              <Text weight="semibold" style={{ color: theme.colors.danger, fontSize: 14 }}>
-                Log out
+              <View
+                style={{
+                  width: 34,
+                  height: 34,
+                  borderRadius: 10,
+                  backgroundColor: 'rgba(229,72,77,0.1)',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <Ionicons name="log-out-outline" size={18} color={theme.colors.danger} />
+              </View>
+              <Text weight="semibold" style={{ flex: 1, color: theme.colors.danger, fontSize: 15 }}>
+                {loggingOut ? 'Logging out…' : 'Log out'}
               </Text>
             </Pressable>
           </>

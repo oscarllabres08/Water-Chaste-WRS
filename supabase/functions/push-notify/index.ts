@@ -332,6 +332,8 @@ Deno.serve(async (req) => {
       kind,
       orderId,
       app: targetApp,
+      title,
+      body,
     };
     const extra = payload?.data && typeof payload.data === "object" ? payload.data : {};
     for (const [k, v] of Object.entries(extra ?? {})) {

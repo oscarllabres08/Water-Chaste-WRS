@@ -304,9 +304,19 @@ export default function RewardsTabScreen() {
           </View>
 
           {!canRedeemSegment && !loading ? (
-            <Text weight="semibold" style={{ marginTop: 10, fontSize: 12, color: 'rgba(255,255,255,0.88)' }}>
-              Need 10 pts in one store balance to redeem (split 5+5 won't work).
-            </Text>
+            <View
+              style={{
+                marginTop: 10,
+                paddingVertical: 8,
+                paddingHorizontal: 10,
+                borderRadius: 8,
+                backgroundColor: 'rgba(6, 21, 63, 0.72)',
+              }}
+            >
+              <Text weight="semibold" style={{ fontSize: 13, lineHeight: 18, color: '#fff' }}>
+                Need 10 pts in one store balance to redeem (split 5+5 won't work).
+              </Text>
+            </View>
           ) : null}
         </GradientCard>
 

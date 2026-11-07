@@ -70,7 +70,12 @@
       "enabled": false
     },
     "extra": {
-      "router": {}
+      "router": {},
+      "supabaseUrl": "https://hjvwwxdyyugjchkeolyp.supabase.co",
+      "supabaseAnonKey": "sb_publishable_syjSQ1DOnVQndCcAzDLRgA_icj7QHx2",
+      "eas": {
+        "projectId": "0bf19887-ec77-4a08-84bf-00c4c7b57925"
+      }
     }
   }
 }

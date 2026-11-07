@@ -47,19 +47,19 @@ Notifications.setNotificationHandler({
         shouldShowAlert: false,
         shouldShowBanner: false,
         shouldShowList: false,
-        shouldPlaySound: true,
+        shouldPlaySound: false,
         shouldSetBadge: false,
       };
     }
-    const { notificationsEnabled } = getNotificationRuntimePrefs();
+    const { notificationsEnabled, soundEnabled } = getNotificationRuntimePrefs();
     const show = notificationsEnabled;
     return {
       shouldShowAlert: show,
       shouldShowBanner: show,
       shouldShowList: show,
-      // Foreground sound is notification.wav from playNotificationSound.
-      // Background alerts use the Android channel sound (same file).
-      shouldPlaySound: false,
+      // Play the channel sound with the real title and message.
+      // A separate blank alert was showing up empty and only vibrating.
+      shouldPlaySound: show && soundEnabled,
       shouldSetBadge: false,
     };
   },

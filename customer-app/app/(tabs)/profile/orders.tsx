@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Pressable, RefreshControl, ScrollView, View } from 'react-native';
-import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
 
 import { useAuth } from '../../../providers/AuthProvider';
@@ -31,6 +30,8 @@ function statusLabel(s: string) {
 
 type OrderFilter = 'all' | 'active' | 'delivered';
 
+const PAGE_SIZE = 10;
+
 export default function MyOrdersScreen() {
   const router = useRouter();
   const { user, loading: authLoading } = useAuth();
@@ -38,8 +39,8 @@ export default function MyOrdersScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [olderOpen, setOlderOpen] = useState(false);
   const [filter, setFilter] = useState<OrderFilter>('all');
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
   async function load() {
     if (authLoading) return;
@@ -63,17 +64,15 @@ export default function MyOrdersScreen() {
 
   const active = useMemo(() => rows.filter((r) => r.status !== 'delivered'), [rows]);
   const delivered = useMemo(() => rows.filter((r) => r.status === 'delivered'), [rows]);
-  const deliveredSplit = useMemo(() => {
-    const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-    const recent: OrderRow[] = [];
-    const older: OrderRow[] = [];
-    for (const o of delivered) {
-      const ts = new Date(o.created_at).getTime();
-      if (!Number.isFinite(ts) || ts >= cutoff) recent.push(o);
-      else older.push(o);
-    }
-    return { recent, older };
-  }, [delivered]);
+  const filtered = useMemo(() => {
+    if (filter === 'active') return active;
+    if (filter === 'delivered') return delivered;
+    return rows;
+  }, [active, delivered, filter, rows]);
+  const shown = filtered.slice(0, visibleCount);
+  const hasMore = filtered.length > shown.length;
+  const shownActive = shown.filter((r) => r.status !== 'delivered');
+  const shownDelivered = shown.filter((r) => r.status === 'delivered');
 
   return (
     <Screen style={{ padding: 0 }} safeAreaEdges={['left', 'right']}>
@@ -116,7 +115,10 @@ export default function MyOrdersScreen() {
             return (
               <Pressable
                 key={opt.key}
-                onPress={() => setFilter(opt.key)}
+                onPress={() => {
+                  setFilter(opt.key);
+                  setVisibleCount(PAGE_SIZE);
+                }}
                 style={{
                   paddingVertical: 10,
                   paddingHorizontal: 14,
@@ -143,7 +145,7 @@ export default function MyOrdersScreen() {
           </Card>
         ) : null}
 
-        {(filter === 'all' || filter === 'active') ? (
+        {(filter === 'all' || filter === 'active') && (loading || filter === 'active' || shownActive.length > 0) ? (
           <Card style={{ marginTop: theme.spacing.md }}>
             <Text variant="h2" weight="extrabold">
               Active
@@ -153,13 +155,13 @@ export default function MyOrdersScreen() {
                 <Skeleton height={74} width="100%" radius={16} />
                 <Skeleton height={74} width="100%" radius={16} />
               </View>
-            ) : active.length === 0 ? (
+            ) : shownActive.length === 0 ? (
               <Text variant="muted" style={{ marginTop: 10 }}>
                 No active orders.
               </Text>
             ) : (
               <View style={{ marginTop: 10, gap: 10 }}>
-                {active.map((o) => (
+                {shownActive.map((o) => (
                   <OrderRowCard key={o.id} row={o} onPress={() => router.push(`/order/${o.id}`)} />
                 ))}
               </View>
@@ -167,7 +169,7 @@ export default function MyOrdersScreen() {
           </Card>
         ) : null}
 
-        {(filter === 'all' || filter === 'delivered') ? (
+        {(filter === 'all' || filter === 'delivered') && (loading || filter === 'delivered' || shownDelivered.length > 0) ? (
           <Card style={{ marginTop: filter === 'delivered' ? theme.spacing.md : theme.spacing.sm }}>
             <Text variant="h2" weight="extrabold">
               Delivered
@@ -177,55 +179,38 @@ export default function MyOrdersScreen() {
                 <Skeleton height={74} width="100%" radius={16} />
                 <Skeleton height={74} width="100%" radius={16} />
               </View>
-            ) : delivered.length === 0 ? (
+            ) : shownDelivered.length === 0 ? (
               <Text variant="muted" style={{ marginTop: 10 }}>
                 No delivered orders yet.
               </Text>
             ) : (
-              <View style={{ marginTop: 10, gap: 12 }}>
-                {deliveredSplit.recent.length > 0 ? (
-                  <View style={{ gap: 10 }}>
-                    {deliveredSplit.recent.map((o) => (
-                      <OrderRowCard key={o.id} row={o} onPress={() => router.push(`/order/${o.id}`)} />
-                    ))}
-                  </View>
-                ) : (
-                  <Text variant="muted">No delivered orders in the last 7 days.</Text>
-                )}
-
-                {deliveredSplit.older.length > 0 ? (
-                  <View style={{ gap: 10 }}>
-                    <Pressable
-                      onPress={() => setOlderOpen((v) => !v)}
-                      style={{
-                        flexDirection: 'row',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        paddingVertical: 10,
-                        paddingHorizontal: 12,
-                        borderRadius: 16,
-                        borderWidth: 1,
-                        borderColor: theme.colors.border,
-                        backgroundColor: 'rgba(0,114,240,0.06)',
-                      }}
-                    >
-                      <Text weight="extrabold" style={{ color: theme.colors.text }}>
-                        Older than 7 days ({deliveredSplit.older.length})
-                      </Text>
-                      <Ionicons name={olderOpen ? 'chevron-up' : 'chevron-down'} size={18} color={theme.colors.muted} />
-                    </Pressable>
-                    {olderOpen ? (
-                      <View style={{ gap: 10 }}>
-                        {deliveredSplit.older.map((o) => (
-                          <OrderRowCard key={o.id} row={o} onPress={() => router.push(`/order/${o.id}`)} />
-                        ))}
-                      </View>
-                    ) : null}
-                  </View>
-                ) : null}
+              <View style={{ marginTop: 10, gap: 10 }}>
+                {shownDelivered.map((o) => (
+                  <OrderRowCard key={o.id} row={o} onPress={() => router.push(`/order/${o.id}`)} />
+                ))}
               </View>
             )}
           </Card>
+        ) : null}
+
+        {!loading && hasMore ? (
+          <Pressable
+            onPress={() => setVisibleCount((count) => count + PAGE_SIZE)}
+            style={{
+              marginTop: theme.spacing.md,
+              paddingVertical: 12,
+              paddingHorizontal: 14,
+              borderRadius: 12,
+              borderWidth: 1,
+              borderColor: theme.colors.border,
+              backgroundColor: '#fff',
+              alignItems: 'center',
+            }}
+          >
+            <Text weight="bold" style={{ color: theme.colors.primary }}>
+              Show more
+            </Text>
+          </Pressable>
         ) : null}
       </ScrollView>
     </Screen>

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Alert, Image, Linking, Modal, Pressable, ScrollView, Switch, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import * as Location from 'expo-location';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 
+import { fetchDrivingDistanceKm } from '../../lib/drivingDistance';
 import { orderDistanceKm, formatOrderDistance } from '../../lib/orderDistance';
 import { publicWrsAssetUrl } from '../../lib/publicAssetUrl';
 import { markOrderViewed } from '../../lib/viewedOrders';
@@ -15,6 +16,7 @@ import { Screen } from '../../ui/components/Screen';
 import { Card } from '../../ui/components/Card';
 import { Text } from '../../ui/components/Text';
 import { Button } from '../../ui/components/Button';
+import { GradientPressable } from '../../ui/components/PrimaryGradient';
 import { TextField } from '../../ui/components/TextField';
 import { SellerOrdersSkeleton } from '../../ui/components/Skeleton';
 import { theme } from '../../ui/theme';
@@ -73,7 +75,7 @@ const STATUS_OPTIONS: Array<{ key: string; label: string }> = [
   { key: 'delivered', label: 'Delivered' },
 ];
 
-const ACTION_ROW_HEIGHT = 44;
+const ACTION_ROW_HEIGHT = 40;
 
 function formatStatusLabel(status: string) {
   const s = status.replaceAll('_', ' ').trim();
@@ -489,6 +491,43 @@ export default function OrderDetailsScreen() {
     return orderDistanceKm(order, distanceReference);
   }, [order, distanceReference]);
   const distanceLabel = formatOrderDistance(distanceKm);
+  const [roadKm, setRoadKm] = useState<number | null>(null);
+  const [roadLoading, setRoadLoading] = useState(false);
+  const distanceReferenceRef = useRef(distanceReference);
+  distanceReferenceRef.current = distanceReference;
+  const orderPinRef = useRef<{ lat: number | null; lng: number | null }>({
+    lat: order?.latitude ?? null,
+    lng: order?.longitude ?? null,
+  });
+  orderPinRef.current = { lat: order?.latitude ?? null, lng: order?.longitude ?? null };
+  const originKey =
+    distanceReference != null ? `${distanceReference.lat.toFixed(3)},${distanceReference.lng.toFixed(3)}` : '';
+  const destKey =
+    order?.latitude != null && order?.longitude != null ? `${order.latitude.toFixed(3)},${order.longitude.toFixed(3)}` : '';
+
+  useEffect(() => {
+    const origin = distanceReferenceRef.current;
+    const pin = orderPinRef.current;
+    if (!origin || pin.lat == null || pin.lng == null) {
+      setRoadKm(null);
+      setRoadLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setRoadKm(null);
+    setRoadLoading(true);
+    void fetchDrivingDistanceKm(origin, { lat: pin.lat, lng: pin.lng }).then((km) => {
+      if (cancelled) return;
+      setRoadKm(km);
+      setRoadLoading(false);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [originKey, destKey]);
+
+  const roadLabel = formatOrderDistance(roadKm);
+  const showingRoad = roadLabel != null;
 
   const outstandingContainers = containerBalance?.outstanding_count ?? 0;
   const lendsOnThisOrder = useMemo(
@@ -633,26 +672,19 @@ export default function OrderDetailsScreen() {
         {order ? (
           <>
             <Animated.View entering={FadeInDown.duration(220)}>
-              <Card>
-                <View style={{ flexDirection: 'row', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10 }}>
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text variant="muted" weight="bold">
-                      Order status
+              <Card style={{ gap: 8 }}>
+                <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, flex: 1, minWidth: 0 }}>
+                    <Ionicons name="time-outline" size={13} color={theme.colors.muted} />
+                    <Text variant="muted" style={{ fontSize: 12 }} numberOfLines={1}>
+                      {new Date(order.created_at).toLocaleString()}
                     </Text>
-                    <View style={{ marginTop: 10 }}>
-                      <OrderStatusSelect
-                        currentStatus={order.status}
-                        locked={statusLocked}
-                        updating={updating}
-                        onSelect={(next) => setStatus(next)}
-                      />
-                    </View>
                   </View>
                   <View
                     style={{
-                      paddingVertical: 6,
-                      paddingHorizontal: 10,
-                      borderRadius: 12,
+                      paddingVertical: 3,
+                      paddingHorizontal: 8,
+                      borderRadius: 8,
                       backgroundColor: 'rgba(0,114,240,0.08)',
                       borderWidth: 1,
                       borderColor: 'rgba(0,114,240,0.14)',
@@ -663,14 +695,44 @@ export default function OrderDetailsScreen() {
                     </Text>
                   </View>
                 </View>
-                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 12 }}>
-                  <Ionicons name="time-outline" size={14} color={theme.colors.muted} />
-                  <Text variant="muted">{new Date(order.created_at).toLocaleString()}</Text>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <OrderStatusSelect
+                      currentStatus={order.status}
+                      locked={statusLocked}
+                      updating={updating}
+                      onSelect={(next) => setStatus(next)}
+                    />
+                  </View>
+                  {order.payment_settled !== true ? (
+                    <GradientPressable
+                      onPress={() => setPayConfirmOpen(true)}
+                      disabled={paymentUpdating}
+                      style={{ borderRadius: 12, flexShrink: 0 }}
+                      innerStyle={{ minHeight: ACTION_ROW_HEIGHT, paddingHorizontal: 12 }}
+                    >
+                      <Text weight="extrabold" style={{ color: '#fff', fontSize: 13 }}>
+                        {paymentUpdating ? 'Saving…' : 'Mark paid'}
+                      </Text>
+                    </GradientPressable>
+                  ) : (
+                    <View
+                      style={{
+                        minHeight: ACTION_ROW_HEIGHT,
+                        paddingHorizontal: 12,
+                        borderRadius: 12,
+                        backgroundColor: 'rgba(34,197,94,0.12)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                      }}
+                    >
+                      <Text weight="extrabold" style={{ color: theme.colors.success, fontSize: 13 }}>
+                        Paid
+                      </Text>
+                    </View>
+                  )}
                 </View>
-                <View style={{ marginTop: 12 }}>
-                  <Text variant="muted" weight="bold" style={{ fontSize: 11 }}>
-                    Payment information
-                  </Text>
+                <View>
 
                   {(order.payment_method ?? '').toLowerCase() === 'utang' ? (
                     <View
@@ -891,29 +953,19 @@ export default function OrderDetailsScreen() {
                   ) : null}
 
                   {(order.payment_method ?? '').toLowerCase() === 'cod' ? (
-                    <View
-                      style={{
-                        marginTop: 10,
-                        padding: 12,
-                        borderRadius: 16,
-                        borderWidth: 1,
-                        borderColor: theme.colors.border,
-                        backgroundColor: '#F5FAFE',
-                      }}
-                    >
-                      <Text weight="extrabold">{paymentMethodLabel(order.payment_method)}</Text>
+                    <Text variant="muted" style={{ marginTop: 2, fontSize: 12 }} numberOfLines={1}>
+                      {paymentMethodLabel(order.payment_method)}
+                      {' · '}
                       <Text
-                        variant="chip"
                         weight="extrabold"
                         style={{
-                          marginTop: 8,
-                          alignSelf: 'flex-start',
+                          fontSize: 12,
                           color: order.payment_settled === true ? theme.colors.success : theme.colors.warning,
                         }}
                       >
-                        {order.payment_settled === true ? 'Payment confirmed · counted in sales' : 'Unpaid — confirm on delivery'}
+                        {order.payment_settled === true ? 'Payment confirmed' : 'Unpaid — confirm on delivery'}
                       </Text>
-                    </View>
+                    </Text>
                   ) : null}
                 </View>
 
@@ -952,15 +1004,6 @@ export default function OrderDetailsScreen() {
                   </View>
                 ) : null}
 
-                {order.payment_settled !== true ? (
-                  <View style={{ marginTop: 12 }}>
-                    <Button
-                      title={paymentUpdating ? 'Saving…' : 'Mark as paid'}
-                      onPress={() => setPayConfirmOpen(true)}
-                      disabled={paymentUpdating}
-                    />
-                  </View>
-                ) : null}
               </Card>
             </Animated.View>
 
@@ -969,83 +1012,92 @@ export default function OrderDetailsScreen() {
                 <Text variant="h2" weight="extrabold">
                   Customer information
                 </Text>
-                <View style={{ marginTop: 12, flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
-                  <View style={{ flex: 1, minWidth: 0, gap: 10 }}>
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 14 }}>
-                      <View
-                        style={{
-                          width: 56,
-                          height: 56,
-                          borderRadius: 28,
-                          overflow: 'hidden',
-                          backgroundColor: 'rgba(0,114,240,0.08)',
-                          borderWidth: 1,
-                          borderColor: 'rgba(0,114,240,0.2)',
-                          alignItems: 'center',
-                          justifyContent: 'center',
-                          flexShrink: 0,
-                        }}
-                      >
-                        {customerAvatarUri ? (
-                          <Image source={{ uri: customerAvatarUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
-                        ) : (
-                          <Text weight="extrabold" style={{ color: theme.colors.primary, fontSize: 22 }}>
-                            {(order.customer_name.trim()[0] ?? '?').toUpperCase()}
-                          </Text>
-                        )}
-                      </View>
-                      <View style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
-                        <Text weight="extrabold" style={{ fontSize: 18, lineHeight: 24 }}>
-                          {order.customer_name}
+                <View style={{ marginTop: 12, gap: 12 }}>
+                  <View style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                    <View
+                      style={{
+                        width: 56,
+                        height: 56,
+                        borderRadius: 28,
+                        overflow: 'hidden',
+                        backgroundColor: 'rgba(0,114,240,0.08)',
+                        borderWidth: 1,
+                        borderColor: 'rgba(0,114,240,0.2)',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                      }}
+                    >
+                      {customerAvatarUri ? (
+                        <Image source={{ uri: customerAvatarUri }} style={{ width: '100%', height: '100%' }} resizeMode="cover" />
+                      ) : (
+                        <Text weight="extrabold" style={{ color: theme.colors.primary, fontSize: 22 }}>
+                          {(order.customer_name.trim()[0] ?? '?').toUpperCase()}
                         </Text>
-                      </View>
+                      )}
                     </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
-                      <Ionicons name="call-outline" size={16} color={theme.colors.primary} />
-                      <Text variant="muted" numberOfLines={1}>
-                        {order.contact_number}
-                      </Text>
-                    </View>
-
-                    <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
-                      <Ionicons name="location-outline" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
-                      <View style={{ flex: 1, gap: 4 }}>
-                        <Text numberOfLines={2}>{order.delivery_address}</Text>
-                        {order.landmark ? <Text variant="muted">Landmark: {order.landmark}</Text> : null}
-                      </View>
-                    </View>
+                    <Text weight="extrabold" style={{ flex: 1, fontSize: 18, lineHeight: 24 }}>
+                      {order.customer_name}
+                    </Text>
                   </View>
 
-                  <View
-                    style={{
-                      width: 132,
-                      flexShrink: 0,
-                      borderRadius: 18,
-                      backgroundColor: '#FFFFFF',
-                      borderWidth: 1,
-                      borderColor: theme.colors.border,
-                      padding: 12,
-                      alignItems: 'center',
-                      justifyContent: 'center',
-                      alignSelf: 'flex-start',
-                      ...theme.shadow.card,
-                    }}
-                  >
-                    <Ionicons name="navigate-outline" size={20} color={theme.colors.primary} />
-                    <Text variant="muted" weight="bold" style={{ marginTop: 8, textAlign: 'center', fontSize: 12 }}>
-                      Approx. distance
-                    </Text>
-                    <Text weight="extrabold" style={{ marginTop: 6, fontSize: 18, color: theme.colors.primary }}>
-                      {distanceLabel ? `~ ${distanceLabel}` : '—'}
-                    </Text>
-                    {!distanceLabel ? (
-                      <Text variant="muted" weight="semibold" style={{ marginTop: 6, fontSize: 10, textAlign: 'center', lineHeight: 14 }}>
-                        {order.latitude == null && order.delivery_distance_meters == null
-                          ? 'Customer did not share GPS'
-                          : 'Set store GPS in Business Profile or turn on location'}
+                  <View style={{ flexDirection: 'row', gap: 12, alignItems: 'flex-start' }}>
+                    <View style={{ flex: 1, minWidth: 0, gap: 10 }}>
+                      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
+                        <Ionicons name="call-outline" size={16} color={theme.colors.primary} />
+                        <Text variant="muted" style={{ flex: 1 }}>
+                          {order.contact_number}
+                        </Text>
+                      </View>
+
+                      <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 8 }}>
+                        <Ionicons name="location-outline" size={16} color={theme.colors.primary} style={{ marginTop: 2 }} />
+                        <View style={{ flex: 1, gap: 4 }}>
+                          <Text>{order.delivery_address}</Text>
+                          {order.landmark ? <Text variant="muted">Landmark: {order.landmark}</Text> : null}
+                        </View>
+                      </View>
+                    </View>
+
+                    <View
+                      style={{
+                        width: 112,
+                        flexShrink: 0,
+                        borderRadius: 18,
+                        backgroundColor: '#FFFFFF',
+                        borderWidth: 1,
+                        borderColor: theme.colors.border,
+                        padding: 12,
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        alignSelf: 'flex-start',
+                        ...theme.shadow.card,
+                      }}
+                    >
+                      <Ionicons name="navigate-outline" size={20} color={theme.colors.primary} />
+                      <Text variant="muted" weight="bold" style={{ marginTop: 8, textAlign: 'center', fontSize: 12 }}>
+                        {showingRoad ? 'Road distance' : 'Approx. distance'}
                       </Text>
-                    ) : null}
+                      <Text weight="extrabold" style={{ marginTop: 6, fontSize: 18, color: theme.colors.primary }}>
+                        {showingRoad ? roadLabel : distanceLabel ? `~ ${distanceLabel}` : '—'}
+                      </Text>
+                      {showingRoad ? (
+                        <Text variant="muted" weight="semibold" style={{ marginTop: 6, fontSize: 10, textAlign: 'center', lineHeight: 14 }}>
+                          By road
+                        </Text>
+                      ) : roadLoading && distanceLabel ? (
+                        <Text variant="muted" weight="semibold" style={{ marginTop: 6, fontSize: 10, textAlign: 'center', lineHeight: 14 }}>
+                          Checking route…
+                        </Text>
+                      ) : null}
+                      {!showingRoad && !distanceLabel ? (
+                        <Text variant="muted" weight="semibold" style={{ marginTop: 6, fontSize: 10, textAlign: 'center', lineHeight: 14 }}>
+                          {order.latitude == null && order.delivery_distance_meters == null
+                            ? 'Customer did not share GPS'
+                            : 'Set store GPS in Business Profile or turn on location'}
+                        </Text>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
 
@@ -1357,9 +1409,9 @@ function OrderStatusSelect({
           minHeight: ACTION_ROW_HEIGHT,
           flexDirection: 'row',
           alignItems: 'center',
-          gap: 10,
-          paddingVertical: 10,
-          paddingHorizontal: 12,
+          gap: 8,
+          paddingVertical: 4,
+          paddingHorizontal: 8,
           borderRadius: 12,
           borderWidth: 1,
           borderColor:
@@ -1370,9 +1422,9 @@ function OrderStatusSelect({
       >
         <View
           style={{
-            width: 28,
-            height: 28,
-            borderRadius: 8,
+            width: 22,
+            height: 22,
+            borderRadius: 7,
             backgroundColor: tint.bg,
             borderWidth: 1,
             borderColor: tint.border,
@@ -1400,8 +1452,8 @@ function OrderStatusSelect({
           flexDirection: 'row',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingVertical: 10,
-          paddingHorizontal: 12,
+          paddingVertical: 4,
+          paddingHorizontal: 8,
           borderRadius: 12,
           borderWidth: 1,
           borderColor: 'rgba(0,114,240,0.22)',
@@ -1409,12 +1461,12 @@ function OrderStatusSelect({
           opacity: updating ? 0.55 : 1,
         }}
       >
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 10, flex: 1, minWidth: 0 }}>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, flex: 1, minWidth: 0 }}>
           <View
             style={{
-              width: 28,
-              height: 28,
-              borderRadius: 8,
+              width: 22,
+              height: 22,
+              borderRadius: 7,
               backgroundColor: tint.bg,
               borderWidth: 1,
               borderColor: tint.border,

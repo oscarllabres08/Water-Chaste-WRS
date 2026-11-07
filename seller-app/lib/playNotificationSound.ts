@@ -1,9 +1,6 @@
-import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
 
-import { ensureAndroidNotificationChannels, NOTIF_CHANNEL_SOUND, notificationContentSound } from './notificationChannels';
-
-// Bundled copy of the repo-root notification.wav (also used by the native notification channel).
+// Bundled copy of the repo-root notification.wav (web playback).
 const notificationWav = require('../assets/notification.wav') as string | { uri?: string };
 
 let webAudio: HTMLAudioElement | null = null;
@@ -52,32 +49,15 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   );
 }
 
-/** Play notification.wav. Native uses the bundled raw sound; web uses the asset file. */
+/**
+ * Web plays notification.wav directly.
+ * On the phone, sound comes from the real notification (title + message + channel).
+ * A blank local alert only vibrates and shows an empty row in the shade.
+ */
 export function playNotificationSound() {
   const now = Date.now();
   if (now - lastPlayedAt < 1500) return;
   lastPlayedAt = now;
 
-  if (Platform.OS === 'web') {
-    playWeb();
-    return;
-  }
-
-  void (async () => {
-    try {
-      await ensureAndroidNotificationChannels();
-      await Notifications.scheduleNotificationAsync({
-        content: {
-          title: ' ',
-          body: ' ',
-          sound: notificationContentSound(true),
-          data: { soundOnly: '1' },
-          ...(Platform.OS === 'android' ? { channelId: NOTIF_CHANNEL_SOUND } : {}),
-        },
-        trigger: null,
-      });
-    } catch {
-      /* permission missing or notifications unsupported */
-    }
-  })();
+  if (Platform.OS === 'web') playWeb();
 }

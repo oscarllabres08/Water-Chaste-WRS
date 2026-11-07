@@ -17,9 +17,9 @@ export default function HelpCenterScreen() {
         <View style={{ marginTop: theme.spacing.md }}>
           <Card>
             <View style={{ gap: 10 }}>
-              <TextField label="Developer name" value="Zoda WRS Dev Team" editable={false} />
-              <TextField label="Email" value="aquabeastwrs.dev@gmail.com" editable={false} />
-              <TextField label="Phone" value="+63 912 345 6789" editable={false} />
+              <TextField label="Developer name" value="Oscar Llabres" editable={false} />
+              <TextField label="Email" value="oscarllabres08gmail.com" editable={false} />
+              <TextField label="Phone" value="+63 953 338 9238" editable={false} />
             </View>
           </Card>
         </View>

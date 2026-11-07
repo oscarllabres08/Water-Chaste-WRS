@@ -1,8 +1,7 @@
 import type { PropsWithChildren, ReactNode } from 'react';
-import { Platform, Pressable, StyleSheet, type PressableProps, View } from 'react-native';
+import { Platform, Pressable, type PressableProps, View } from 'react-native';
 import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { theme } from '../theme';
-import { PrimaryGradient } from './PrimaryGradient';
 import { Text } from './Text';
 
 type Variant = 'primary' | 'ghost' | 'danger';
@@ -31,7 +30,11 @@ export function Button({ variant = 'primary', title, leadingIcon, children, styl
         text: theme.colors.primaryDark,
       };
     }
-    return { bg: 'transparent', border: 'transparent', text: theme.colors.onPrimary };
+    return {
+      bg: disabled ? '#9CC4F5' : theme.colors.primary,
+      border: 'transparent',
+      text: theme.colors.onPrimary,
+    };
   })();
 
   const basePressableStyle = {
@@ -41,28 +44,29 @@ export function Button({ variant = 'primary', title, leadingIcon, children, styl
     paddingHorizontal: 14,
     alignItems: 'center' as const,
     justifyContent: 'center' as const,
-    backgroundColor: variant === 'primary' ? 'transparent' : colors.bg,
+    backgroundColor: colors.bg,
     borderWidth: variant === 'ghost' ? 1.5 : 0,
     borderColor: variant === 'ghost' ? colors.border : 'transparent',
-    ...(variant === 'danger'
-      ? { elevation: 0, shadowOpacity: 0, shadowRadius: 0, shadowOffset: { width: 0, height: 0 } }
-      : theme.shadow.card),
+    elevation: 0,
+    shadowOpacity: 0,
+    shadowRadius: 0,
+    shadowOffset: { width: 0, height: 0 },
   };
 
   const wrapperStyle = typeof style === 'function' ? undefined : style;
   const pressableStyle = typeof style === 'function' ? style : undefined;
 
   return (
-    <Animated.View style={[animatedStyle, { opacity: disabled ? 0.6 : 1 }, wrapperStyle]}>
+    <Animated.View style={[animatedStyle, wrapperStyle]}>
       <Pressable
         {...rest}
         disabled={disabled}
         android_ripple={
           variant === 'primary'
-            ? { color: 'rgba(255,255,255,0.22)', borderless: true }
+            ? { color: 'rgba(255,255,255,0.22)', borderless: false }
             : variant === 'danger'
-              ? { color: 'rgba(229,72,77,0.16)', borderless: true }
-              : { color: 'rgba(11,58,150,0.1)', borderless: true }
+              ? { color: 'rgba(229,72,77,0.16)', borderless: false }
+              : { color: 'rgba(11,58,150,0.1)', borderless: false }
         }
         onPressIn={(e) => {
           scale.value = withSpring(0.96, { damping: 14, stiffness: 340 });
@@ -78,15 +82,12 @@ export function Button({ variant = 'primary', title, leadingIcon, children, styl
             : [basePressableStyle, typeof style === 'function' ? undefined : style]
         }
       >
-        {variant === 'primary' ? <PrimaryGradient /> : null}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8 }}>
           {leadingIcon}
           {typeof title === 'string' ? (
             <Text
               weight="extrabold"
               numberOfLines={1}
-              adjustsFontSizeToFit
-              minimumFontScale={0.86}
               style={{
                 color: colors.text,
                 fontSize: 16,

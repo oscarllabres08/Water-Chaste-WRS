@@ -15,9 +15,9 @@ export default function HelpCenterScreen() {
             Contact developer support if you need help.
           </Text>
           <View style={{ marginTop: 12, gap: 10 }}>
-            <TextField label="Developer name" value="Zoda WRS Dev Team" editable={false} />
-            <TextField label="Email" value="aquabeastwrs.dev@gmail.com" editable={false} />
-            <TextField label="Phone" value="+63 906 681 2820" editable={false} />
+            <TextField label="Developer name" value="Oscar Jomer Llabres" editable={false} />
+            <TextField label="Email" value="oscarllabres0@gmail.com" editable={false} />
+            <TextField label="Phone" value="+63 953 338 9238" editable={false} />
           </View>
         </Card>
       </ScrollView>

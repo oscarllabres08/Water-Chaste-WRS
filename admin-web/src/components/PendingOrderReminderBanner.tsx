@@ -1,7 +1,7 @@
-import { useNavigate } from 'react-router-dom';
+import { useState } from 'react';
 
 import { AlertIcon } from './UiIcons';
-import type { StalePendingOrder } from '../lib/pendingOrderReminder';
+import { requestPendingOrderReminders, type StalePendingOrder } from '../lib/pendingOrderReminder';
 
 type Props = {
   orders: StalePendingOrder[];
@@ -17,15 +17,24 @@ function CloseIcon() {
 }
 
 export function PendingOrderReminderBanner({ orders, onDismiss }: Props) {
-  const navigate = useNavigate();
+  const [busy, setBusy] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
   if (orders.length === 0) return null;
 
   const count = orders.length;
   const first = orders[0];
   const label =
     count === 1
-      ? `${first.customer_name?.trim() || 'Customer'}'s order is still pending (30+ min unopened).`
-      : `${count} customer orders are still pending (30+ min unopened).`;
+      ? `${first.customer_name?.trim() || 'Customer'}'s order is still pending. The status has not moved.`
+      : `${count} orders are still pending. Their status has not moved.`;
+
+  async function remind() {
+    setBusy(true);
+    setNotice(null);
+    const result = await requestPendingOrderReminders(orders.map((order) => order.id));
+    setNotice(result.message);
+    setBusy(false);
+  }
 
   return (
     <div className="pending-order-reminder-banner" role="alert">
@@ -35,15 +44,16 @@ export function PendingOrderReminderBanner({ orders, onDismiss }: Props) {
         </span>
         <div className="pending-order-reminder-copy">
           <strong>Pending order reminder</strong>
-          <p>{label} Open the dashboard to review.</p>
+          <p>{notice ?? label}</p>
         </div>
         <div className="pending-order-reminder-actions">
           <button
             type="button"
             className="btn btn-primary btn-sm pending-order-reminder-action"
-            onClick={() => navigate('/')}
+            disabled={busy}
+            onClick={() => void remind()}
           >
-            View orders
+            {busy ? 'Sending…' : 'Remind'}
           </button>
           <button
             type="button"

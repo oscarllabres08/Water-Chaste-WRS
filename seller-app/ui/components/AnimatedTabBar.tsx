@@ -17,6 +17,8 @@ type TabDef = {
 
 const INACTIVE_COLOR = theme.colors.muted;
 const INACTIVE_LABEL = theme.colors.tabInactiveLabel;
+const ROW_HEIGHT = 54;
+const PILL_INSET = 6;
 
 const TABS: TabDef[] = [
   { key: 'orders', label: 'Orders', icon: 'list-outline', iconActive: 'list' },
@@ -56,11 +58,11 @@ function TabButton({
   const focus = useSharedValue(isFocused ? 1 : 0);
 
   useEffect(() => {
-    focus.value = withSpring(isFocused ? 1 : 0, { damping: 14, stiffness: 220, mass: 0.6 });
+    focus.value = withSpring(isFocused ? 1 : 0, { damping: 14, stiffness: 240, mass: 0.55 });
   }, [isFocused, focus]);
 
   const iconAnim = useAnimatedStyle(() => ({
-    transform: [{ scale: 1 + focus.value * 0.14 }, { translateY: focus.value * -3 }],
+    transform: [{ scale: 0.92 + focus.value * 0.12 }],
   }));
 
   const resolvedIcon = isFocused ? iconActiveName : iconName;
@@ -72,10 +74,11 @@ function TabButton({
         flex: 1,
         alignItems: 'center',
         justifyContent: 'center',
-        gap: 4,
+        height: ROW_HEIGHT,
+        gap: 2,
       }}
     >
-      <Animated.View style={[{ width: 38, height: 38, alignItems: 'center', justifyContent: 'center' }, iconAnim]}>
+      <Animated.View style={[{ alignItems: 'center', justifyContent: 'center' }, iconAnim]}>
         <Ionicons
           name={resolvedIcon}
           size={22}
@@ -130,9 +133,9 @@ export function AnimatedTabBar({ state, descriptors, navigation }: BottomTabBarP
     const count = Math.max(tabCount.value, 1);
     const tabW = trackWidth.value / count;
     return {
-      width: Math.max(tabW - 10, 0),
+      width: Math.max(tabW - PILL_INSET * 2, 0),
       opacity: trackWidth.value > 0 ? 1 : 0,
-      transform: [{ translateX: active.value * tabW + 5 }],
+      transform: [{ translateX: active.value * tabW + PILL_INSET }],
     };
   });
 
@@ -151,7 +154,7 @@ export function AnimatedTabBar({ state, descriptors, navigation }: BottomTabBarP
         onLayout={(e) => {
           trackWidth.value = e.nativeEvent.layout.width;
         }}
-        style={{ flexDirection: 'row', minHeight: 52, alignItems: 'center' }}
+        style={{ flexDirection: 'row', height: ROW_HEIGHT, alignItems: 'center' }}
       >
         <Animated.View
           pointerEvents="none"
@@ -159,8 +162,8 @@ export function AnimatedTabBar({ state, descriptors, navigation }: BottomTabBarP
             {
               position: 'absolute',
               left: 0,
-              top: 2,
-              height: 48,
+              top: 0,
+              height: ROW_HEIGHT,
               borderRadius: 16,
               backgroundColor: 'rgba(0,116,240,0.12)',
             },

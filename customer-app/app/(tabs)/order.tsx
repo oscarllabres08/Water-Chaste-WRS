@@ -259,16 +259,34 @@ export default function OrderScreen() {
     if (!userId) return;
     let alive = true;
     async function loadProfile() {
-      const { data } = await supabase
-        .from('profiles')
-        .select('display_name,phone,address,latitude,longitude')
-        .eq('user_id', userId)
-        .maybeSingle();
+      const [{ data }, { data: lastOrder }] = await Promise.all([
+        supabase
+          .from('profiles')
+          .select('display_name,phone,address,latitude,longitude')
+          .eq('user_id', userId)
+          .maybeSingle(),
+        supabase
+          .from('orders')
+          .select('contact_number,delivery_address,latitude,longitude')
+          .eq('customer_id', userId)
+          .order('created_at', { ascending: false })
+          .limit(1)
+          .maybeSingle(),
+      ]);
       if (!alive) return;
-      setProfileDefaults(data ?? null);
-      const name = (data?.display_name ?? '').trim();
-      const phone = (data?.phone ?? '').trim();
-      const addr = (data?.address ?? '').trim();
+      const phone = (data?.phone ?? '').trim() || (lastOrder?.contact_number ?? '').trim();
+      const addr = (data?.address ?? '').trim() || (lastOrder?.delivery_address ?? '').trim();
+      const lat = typeof data?.latitude === 'number' ? data.latitude : lastOrder?.latitude;
+      const lng = typeof data?.longitude === 'number' ? data.longitude : lastOrder?.longitude;
+      const defaults = {
+        display_name: data?.display_name ?? null,
+        phone: phone || null,
+        address: addr || null,
+        latitude: typeof lat === 'number' && Number.isFinite(lat) ? lat : null,
+        longitude: typeof lng === 'number' && Number.isFinite(lng) ? lng : null,
+      };
+      setProfileDefaults(defaults);
+      const name = (defaults.display_name ?? '').trim();
       setCustomerName((prev) => (prev.trim() ? prev : name));
       setContactNumber((prev) => (prev.trim() ? prev : phone));
       setDeliveryAddress((prev) => (prev.trim() ? prev : addr));
@@ -297,7 +315,6 @@ export default function OrderScreen() {
     const lng = profileDefaults?.longitude;
     if (typeof lat === 'number' && typeof lng === 'number' && Number.isFinite(lat) && Number.isFinite(lng)) {
       setCoords({ latitude: lat, longitude: lng });
-      setLocationMessage('Using your saved profile location.');
     }
   }, [step, profileDefaults, coords]);
 
@@ -522,12 +539,17 @@ export default function OrderScreen() {
 
     setPlacing(true);
     try {
+      const savedPhone = contactNumber.trim();
+      const savedAddress = deliveryAddress.trim();
+      const savedLat = coords?.latitude ?? profileDefaults?.latitude ?? null;
+      const savedLng = coords?.longitude ?? profileDefaults?.longitude ?? null;
       const { error: profileErr } = await supabase
         .from('profiles')
         .update({
-          address: deliveryAddress.trim(),
-          latitude: coords?.latitude ?? profileDefaults?.latitude ?? null,
-          longitude: coords?.longitude ?? profileDefaults?.longitude ?? null,
+          phone: savedPhone,
+          address: savedAddress,
+          latitude: savedLat,
+          longitude: savedLng,
         })
         .eq('user_id', user.id);
       if (profileErr) throw profileErr;
@@ -543,9 +565,9 @@ export default function OrderScreen() {
           seller_id: sellerId,
           customer_name: customerName.trim(),
           delivery_address: deliveryAddress.trim(),
-          contact_number: contactNumber.trim(),
-          latitude: coords?.latitude ?? profileDefaults?.latitude ?? null,
-          longitude: coords?.longitude ?? profileDefaults?.longitude ?? null,
+          contact_number: savedPhone,
+          latitude: savedLat,
+          longitude: savedLng,
           delivery_fee: deliveryFee,
           delivery_distance_meters: deliveryQuote.distanceMeters,
           notes: notes.trim() ? notes.trim() : null,
@@ -587,11 +609,22 @@ export default function OrderScreen() {
         if (feeErr) throw feeErr;
       }
 
+      setProfileDefaults((prev) => ({
+        ...(prev ?? {}),
+        phone: savedPhone,
+        address: savedAddress,
+        latitude: savedLat,
+        longitude: savedLng,
+      }));
       setQtyById({});
       setCustomerName((profileDefaults?.display_name ?? '').trim());
-      setDeliveryAddress((profileDefaults?.address ?? '').trim());
-      setContactNumber((profileDefaults?.phone ?? '').trim());
-      setCoords(null);
+      setDeliveryAddress(savedAddress);
+      setContactNumber(savedPhone);
+      setCoords(
+        typeof savedLat === 'number' && typeof savedLng === 'number'
+          ? { latitude: savedLat, longitude: savedLng }
+          : null
+      );
       setLocationMessage(null);
       setNotes('');
       setPaymentReference('');
@@ -1305,7 +1338,7 @@ export default function OrderScreen() {
                       <View style={{ alignSelf: 'flex-start' }}>
                         <Button
                           variant="ghost"
-                          title={locating ? 'Getting location…' : 'Use Current Location'}
+                          title={locating ? 'Getting location…' : coords ? 'Update current location' : 'Use Current Location'}
                           leadingIcon={
                             locating ? (
                               <ActivityIndicator size="small" color={theme.colors.danger} />
@@ -1318,9 +1351,21 @@ export default function OrderScreen() {
                         />
                       </View>
                       {coords ? (
-                        <Text variant="muted" style={{ fontSize: 13 }}>
-                          📍 {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
-                        </Text>
+                        <View
+                          style={{
+                            paddingVertical: 8,
+                            paddingHorizontal: 10,
+                            borderRadius: 8,
+                            backgroundColor: 'rgba(47,184,74,0.12)',
+                          }}
+                        >
+                          <Text weight="semibold" style={{ color: theme.colors.success, fontSize: 13 }}>
+                            Current location is already in use.
+                          </Text>
+                          <Text variant="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                            {coords.latitude.toFixed(4)}, {coords.longitude.toFixed(4)}
+                          </Text>
+                        </View>
                       ) : (
                         <Text variant="muted" style={{ fontSize: 13, lineHeight: 18 }}>
                           Address is required. Type it, or tap Use Current Location to save it on your profile.

@@ -294,7 +294,6 @@ export function AdminLayout() {
           </div>
         </div>
         <div className="admin-mobile-bar-actions">
-          {pendingOrders > 0 ? <span className="admin-mobile-bar-badge">{pendingOrders}</span> : null}
           <AdminNotificationsButton placement="header" />
         </div>
       </header>

@@ -181,7 +181,7 @@ export function CustomersPage() {
     const { data: orders } = await supabase
       .from('orders')
       .select(
-        'id,customer_id,created_at,status,payment_settled,payment_method,delivery_fee,order_items(product_name,unit_price,quantity)'
+        'id,customer_id,created_at,status,payment_settled,payment_method,delivery_fee,contact_number,order_items(product_name,unit_price,quantity)'
       )
       .eq('seller_id', businessId)
       .order('created_at', { ascending: false })
@@ -206,8 +206,12 @@ export function CustomersPage() {
       }
     >();
 
+    const phoneByCustomer = new Map<string, string>();
+
     for (const o of orders ?? []) {
-      const row = o as OrderHistorySource & { customer_id: string };
+      const row = o as OrderHistorySource & { customer_id: string; contact_number?: string | null };
+      const contact = row.contact_number?.trim();
+      if (contact && !phoneByCustomer.has(row.customer_id)) phoneByCustomer.set(row.customer_id, contact);
       const orderTotal = orderGrandTotal(row.order_items, row.delivery_fee);
       const utangUnpaid =
         (row.payment_method ?? '').toLowerCase() === 'utang' && row.payment_settled !== true;
@@ -354,7 +358,8 @@ export function CustomersPage() {
         avatar_path: string | null;
       };
       const username = p.username?.trim() || '';
-      const displayName = p.display_name?.trim() || 'Customer';
+      const displayName = (p.display_name ?? '').trim().replace(/\s+/g, ' ') || 'Customer';
+      const phone = p.phone?.trim() || phoneByCustomer.get(p.user_id) || '—';
       const nameKey = normalizeCustomerName(displayName);
       if (!nameKey) continue;
       const a = agg.get(p.user_id);
@@ -366,7 +371,7 @@ export function CustomersPage() {
           name: displayName,
           username,
           avatarPath: p.avatar_path ?? null,
-          phone: p.phone?.trim() || '—',
+          phone,
           address: p.address?.trim() || '—',
           orderCount: a?.count ?? 0,
           lastOrder: a?.last ?? null,
@@ -391,7 +396,7 @@ export function CustomersPage() {
       existing.containersOutstanding += Math.max(0, bal?.outstanding_count ?? 0);
       if (a?.last && (!existing.lastOrder || a.last > existing.lastOrder)) existing.lastOrder = a.last;
       if (!existing.username && username) existing.username = username;
-      if (existing.phone === '—' && p.phone?.trim()) existing.phone = p.phone.trim();
+      if (existing.phone === '—' && phone !== '—') existing.phone = phone;
       if (existing.address === '—' && p.address?.trim()) existing.address = p.address.trim();
       if (!existing.avatarPath && p.avatar_path) existing.avatarPath = p.avatar_path;
       const extraNotes = bal?.identifier_notes?.trim();
@@ -537,6 +542,7 @@ export function CustomersPage() {
     const ch = supabase
       .channel(`admin-customers-${businessId}`)
       .on('postgres_changes', { event: '*', schema: 'public', table: 'orders', filter: `seller_id=eq.${businessId}` }, () => void load())
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, () => void load())
       .on('postgres_changes', { event: '*', schema: 'public', table: 'pos_sales', filter: `seller_id=eq.${businessId}` }, () => void load())
       .on(
         'postgres_changes',
