@@ -8612,3 +8612,201 @@ input[type='number']::-webkit-inner-spin-button {
 [data-theme='dark'] .loyalty-give-notice {
   background: rgba(60, 194, 74, 0.16);
 }
+
+/* Phone: tighter type, padding, and grids so more of each page fits. */
+@media (max-width: 767px) {
+  :root {
+    --admin-mobile-bar-offset: calc(48px + env(safe-area-inset-top, 0px));
+  }
+
+  .admin-mobile-bar {
+    min-height: 48px;
+    gap: 8px;
+    padding:
+      max(4px, env(safe-area-inset-top))
+      max(8px, env(safe-area-inset-right))
+      4px
+      max(6px, env(safe-area-inset-left));
+  }
+
+  .admin-menu-btn,
+  .admin-notifications-fixed--header .admin-notifications-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  .admin-mobile-bar-logo {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+  }
+
+  .admin-mobile-bar-title {
+    font-size: 13px;
+  }
+
+  .admin-mobile-bar-page {
+    font-size: 11px;
+  }
+
+  .admin-main {
+    padding: 8px 8px max(12px, env(safe-area-inset-bottom));
+  }
+
+  .card,
+  .card-flat,
+  .station-panel,
+  .sales-kpi-card,
+  .settings-section-trigger {
+    padding: 10px 12px;
+    border-radius: 12px;
+  }
+
+  .card + .card {
+    margin-top: 8px;
+  }
+
+  .btn {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+
+  .btn-sm {
+    padding: 6px 10px;
+    font-size: 12px;
+  }
+
+  .field {
+    margin-bottom: 8px;
+    gap: 4px;
+  }
+
+  .field input,
+  .field select,
+  .field textarea {
+    padding: 8px 10px;
+    border-radius: 10px;
+    font-size: 14px;
+  }
+
+  table.data-table {
+    font-size: 13px;
+  }
+
+  table.data-table th,
+  table.data-table td {
+    padding: 8px 8px;
+  }
+
+  .station-overview {
+    gap: 8px;
+  }
+
+  .station-hero h1 {
+    font-size: 17px;
+  }
+
+  .station-hero p,
+  .station-kicker {
+    display: none;
+  }
+
+  .station-new-sale {
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+
+  .station-stat-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .station-stat {
+    padding: 8px;
+    gap: 8px;
+    border-radius: 10px;
+  }
+
+  .station-stat-icon,
+  .station-action-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+  }
+
+  .station-stat-label,
+  .station-stat em {
+    font-size: 10px;
+  }
+
+  .station-stat strong {
+    font-size: 15px;
+  }
+
+  .station-panel-head {
+    margin-bottom: 8px;
+  }
+
+  .station-tx-list li,
+  .station-stock-list li,
+  .station-action {
+    padding: 6px 0;
+  }
+
+  .grid-stats,
+  .expenses-summary-row,
+  .sales-kpi-grid {
+    gap: 8px;
+    margin-bottom: 10px;
+  }
+
+  .stat-card {
+    padding: 8px 10px 8px 12px;
+    border-radius: 10px;
+  }
+
+  .stat-card .value {
+    font-size: 16px;
+    margin-top: 2px;
+  }
+
+  .sales-kpi-card {
+    padding: 8px 10px;
+  }
+
+  .inventory-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+  }
+
+  .inventory-item-media {
+    aspect-ratio: 5 / 4;
+  }
+
+  .loyalty-side,
+  .loyalty-main,
+  .loyalty-layout .card {
+    gap: 8px;
+  }
+
+  .loyalty-customer {
+    padding: 8px 10px;
+    gap: 8px;
+  }
+
+  .customer-list-avatar {
+    width: 32px;
+    height: 32px;
+  }
+
+  .settings-section {
+    margin-bottom: 8px;
+  }
+
+  .muted-block,
+  .expenses-section-hint,
+  .loyalty-settings-desc {
+    font-size: 12px;
+    line-height: 1.35;
+  }
+}
