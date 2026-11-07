@@ -68,7 +68,7 @@ async function signJwtRs256(privateKeyPem: string, header: Record<string, unknow
     .replace("-----END PRIVATE KEY-----", "")
     .replaceAll("\n", "")
     .trim();
-  const pkDer = Uint8Array.from(atob(pemBody), (c) => c.charCodeAt(0));
+  const pkDer = Uint8Array.from(atob(pemBody), (c: string) => c.charCodeAt(0));
   const key = await crypto.subtle.importKey(
     "pkcs8",
     pkDer.buffer,
@@ -232,8 +232,8 @@ async function sendFcmMessage({
   deviceToken,
   title,
   body,
+  channelId,
   data,
-  soundEnabled,
   collapseTag,
 }: {
   fcmProjectId: string;
@@ -241,24 +241,17 @@ async function sendFcmMessage({
   deviceToken: string;
   title: string;
   body: string;
+  channelId: string;
   data: Record<string, string>;
-  soundEnabled: boolean;
   collapseTag: string;
 }) {
   const url = `https://fcm.googleapis.com/v1/projects/${encodeURIComponent(fcmProjectId)}/messages:send`;
-  const channelId = soundEnabled ? FCM_CHANNEL_SOUND : FCM_CHANNEL_SILENT;
-  const androidNotification: Record<string, string | boolean> = {
-    channel_id: channelId,
-    tag: collapseTag,
-    notification_priority: "PRIORITY_MAX",
-    visibility: "PUBLIC",
-    default_vibrate_timings: true,
-    default_sound: false,
-  };
-  if (soundEnabled) {
-    androidNotification.sound = FCM_SOUND_RAW;
-  }
+  const visibleTitle = title.trim() || "Water Chaste";
+  const visibleBody = body.trim();
 
+  // The phone draws this itself when the screen is off or the app is closed.
+  // Title and text must be on the notification block. A data-only message stays silent
+  // on most Android phones once the app is swiped away.
   const res = await fetch(url, {
     method: "POST",
     headers: {
@@ -268,7 +261,7 @@ async function sendFcmMessage({
     body: JSON.stringify({
       message: {
         token: deviceToken,
-        notification: { title, body },
+        notification: { title: visibleTitle, body: visibleBody },
         data,
         android: {
           priority: "HIGH",
@@ -276,9 +269,13 @@ async function sendFcmMessage({
           direct_boot_ok: true,
           collapse_key: collapseTag,
           notification: {
-            ...androidNotification,
-            title,
-            body,
+            title: visibleTitle,
+            body: visibleBody,
+            channel_id: channelId,
+            notification_priority: "PRIORITY_HIGH",
+            visibility: "PUBLIC",
+            default_vibrate_timings: true,
+            default_sound: true,
           },
         },
       },
@@ -326,6 +323,9 @@ Deno.serve(async (req) => {
     const notificationId = String(payload?.notification_id ?? "");
     const collapseTag = buildCollapseTag(kind, orderId, notificationId);
 
+    const channelId = soundEnabled ? FCM_CHANNEL_SOUND : FCM_CHANNEL_SILENT;
+    // `message` is the visible text. Do not put the sentence in `body`:
+    // Expo parses `data.body` as JSON and then shows a blank row.
     const data: Record<string, string> = {
       recipientId,
       notificationId,
@@ -333,11 +333,15 @@ Deno.serve(async (req) => {
       orderId,
       app: targetApp,
       title,
-      body,
+      message: body,
+      channelId,
+      tag: collapseTag,
     };
+    if (soundEnabled) data.sound = FCM_SOUND_RAW;
     const extra = payload?.data && typeof payload.data === "object" ? payload.data : {};
     for (const [k, v] of Object.entries(extra ?? {})) {
       if (v === null || v === undefined) continue;
+      if (k === "title" || k === "message" || k === "body" || k === "channelId" || k === "sound" || k === "tag") continue;
       if (typeof v === "string" || typeof v === "number" || typeof v === "boolean") data[k] = String(v);
     }
 
@@ -350,8 +354,8 @@ Deno.serve(async (req) => {
           deviceToken: t.token,
           title,
           body,
+          channelId,
           data,
-          soundEnabled,
           collapseTag,
         });
         results.push({ token: t.token, ok: true });

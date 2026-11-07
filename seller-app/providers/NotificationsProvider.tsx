@@ -3,7 +3,7 @@ import * as Notifications from 'expo-notifications';
 import { AppState, type AppStateStatus } from 'react-native';
 
 import { ensureAndroidNotificationChannels } from '../lib/notificationChannels';
-import { playNotificationSound } from '../lib/playNotificationSound';
+import { noteRemoteNotification, playNotificationSound } from '../lib/playNotificationSound';
 import { registerSellerPushToken } from '../lib/registerPushToken';
 import { setNotificationRuntimePrefs } from '../lib/notificationRuntime';
 import { supabase } from '../lib/supabase';
@@ -98,10 +98,8 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
   useEffect(() => {
     const sub = Notifications.addNotificationReceivedListener((notification) => {
       const data = notification.request.content.data as Record<string, unknown> | undefined;
-      if (data?.soundOnly === '1') return;
-      if (AppState.currentState !== 'active') return;
-      if (!prefsRef.current.notificationsEnabled || !prefsRef.current.soundEnabled) return;
-      playNotificationSound();
+      if (data?.soundOnly === '1' || data?.localAlert === '1') return;
+      noteRemoteNotification(typeof data?.notificationId === 'string' ? data.notificationId : undefined);
     });
     return () => sub.remove();
   }, []);
@@ -190,7 +188,12 @@ export function NotificationsProvider({ children }: { children: React.ReactNode 
               if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
               const toastMs = kind === 'pending_order_reminder' ? 6000 : 3000;
               toastTimerRef.current = setTimeout(() => setToast(null), toastMs);
-              if (prefsRef.current.soundEnabled) playNotificationSound();
+              playNotificationSound({
+                id,
+                title: String(n.title ?? 'Notification'),
+                body: String(n.body ?? ''),
+                sound: prefsRef.current.soundEnabled,
+              });
             }
           }
           void refresh();

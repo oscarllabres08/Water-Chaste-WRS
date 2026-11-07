@@ -11,7 +11,7 @@ export const NOTIF_SOUND_RAW = 'notification';
 export const NOTIF_CHANNEL_SOUND = 'wrs_alerts_v4';
 export const NOTIF_CHANNEL_SILENT = 'wrs_silent_v1';
 
-const LEGACY_CHANNEL_IDS = ['default', 'silent', 'wrs_alerts_v3'];
+const LEGACY_CHANNEL_IDS = ['silent', 'wrs_alerts_v3'];
 
 export function notificationContentSound(soundOn: boolean): string | undefined {
   if (!soundOn) return undefined;

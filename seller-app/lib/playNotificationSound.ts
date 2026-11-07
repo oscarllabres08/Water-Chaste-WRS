@@ -1,4 +1,7 @@
+import * as Notifications from 'expo-notifications';
 import { Platform } from 'react-native';
+
+import { NOTIF_CHANNEL_SILENT, NOTIF_CHANNEL_SOUND, notificationContentSound } from './notificationChannels';
 
 // Bundled copy of the repo-root notification.wav (web playback).
 const notificationWav = require('../assets/notification.wav') as string | { uri?: string };
@@ -10,7 +13,19 @@ function webSoundUri() {
   return notificationWav?.uri ?? '';
 }
 
-let lastPlayedAt = 0;
+const shownIds = new Set<string>();
+
+function remember(id: string) {
+  shownIds.add(id);
+  setTimeout(() => shownIds.delete(id), 20000);
+}
+
+/** FCM already showed this row, so the in-app listener must not post a second one. */
+export function noteRemoteNotification(id: string | undefined) {
+  const key = String(id ?? '').trim();
+  if (!key || shownIds.has(key)) return;
+  remember(key);
+}
 
 function playWeb() {
   if (typeof Audio === 'undefined') return;
@@ -49,15 +64,34 @@ if (Platform.OS === 'web' && typeof window !== 'undefined') {
   );
 }
 
-/**
- * Web plays notification.wav directly.
- * On the phone, sound comes from the real notification (title + message + channel).
- * A blank local alert only vibrates and shows an empty row in the shade.
- */
-export function playNotificationSound() {
-  const now = Date.now();
-  if (now - lastPlayedAt < 1500) return;
-  lastPlayedAt = now;
+type PhoneAlert = { id?: string; title?: string; body?: string; sound?: boolean };
 
-  if (Platform.OS === 'web') playWeb();
+/**
+ * Web plays notification.wav.
+ * On the phone, posts a real notification on the sound channel so the shade
+ * and the ringtone both fire when a row arrives in the app.
+ */
+export function playNotificationSound(alert?: PhoneAlert) {
+  if (Platform.OS === 'web') {
+    playWeb();
+    return;
+  }
+
+  const title = alert?.title?.trim();
+  if (!title) return;
+  const id = String(alert?.id ?? '').trim();
+  if (id && shownIds.has(id)) return;
+  if (id) remember(id);
+
+  const soundOn = alert?.sound !== false;
+  void Notifications.scheduleNotificationAsync({
+    content: {
+      title,
+      body: alert?.body?.trim() || '',
+      sound: notificationContentSound(soundOn),
+      priority: Notifications.AndroidNotificationPriority.MAX,
+      data: { localAlert: '1', notificationId: id },
+    },
+    trigger: { channelId: soundOn ? NOTIF_CHANNEL_SOUND : NOTIF_CHANNEL_SILENT },
+  }).catch(() => {});
 }
