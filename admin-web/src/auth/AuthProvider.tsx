@@ -141,6 +141,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }
 
     if (profileReadyFor.current !== uid) setProfileLoading(true);
+    const stopProfileWait = window.setTimeout(() => setProfileLoading(false), 8000);
 
     try {
 
@@ -287,9 +288,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profileReadyFor.current = null;
 
     } finally {
-
+      window.clearTimeout(stopProfileWait);
       setProfileLoading(false);
-
     }
 
   }, [session?.user?.id]);
@@ -297,49 +297,38 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 
   useEffect(() => {
-
     let mounted = true;
+    const stopWaiting = window.setTimeout(() => {
+      if (!mounted) return;
+      setLoading(false);
+      setProfileLoading(false);
+    }, 8000);
 
-    supabase.auth
-
+    void supabase.auth
       .getSession()
-
       .then(({ data }) => {
-
         if (!mounted) return;
-
         setSession(data.session ?? null);
-
         setLoading(false);
-
       })
-
       .catch(() => {
-
         if (!mounted) return;
-
         setLoading(false);
-
       });
 
-
-
     const { data: sub } = supabase.auth.onAuthStateChange((_event, nextSession) => {
-
-      setSession(nextSession ?? null);
-
+      window.setTimeout(() => {
+        if (!mounted) return;
+        setSession(nextSession ?? null);
+        setLoading(false);
+      }, 0);
     });
 
-
-
     return () => {
-
       mounted = false;
-
+      window.clearTimeout(stopWaiting);
       sub.subscription.unsubscribe();
-
     };
-
   }, []);
 
 

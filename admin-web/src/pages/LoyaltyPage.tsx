@@ -85,7 +85,10 @@ export function LoyaltyPage() {
 
   const load = useCallback(async () => {
 
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
 
@@ -120,7 +123,10 @@ export function LoyaltyPage() {
 
 
   const loadCustomers = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setCustomersLoading(false);
+      return;
+    }
     setCustomersLoading(true);
     const { data, error: balErr } = await supabase
       .from('loyalty_balances')

@@ -32,5 +32,7 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     persistSession: true,
     detectSessionInUrl: true,
     storage: typeof window !== 'undefined' ? window.sessionStorage : undefined,
+    // The default browser lock can leave getSession() waiting forever, so the admin stays on the loading screen.
+    lock: async <R>(_name: string, _acquireTimeout: number, fn: () => Promise<R>) => fn(),
   },
 });

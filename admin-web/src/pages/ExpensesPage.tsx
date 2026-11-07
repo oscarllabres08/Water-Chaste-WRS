@@ -47,7 +47,10 @@ export function ExpensesPage() {
   const isViewingToday = !viewAllDates && viewDate === today;
 
   const load = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setLoadError(null);
     let query = supabase

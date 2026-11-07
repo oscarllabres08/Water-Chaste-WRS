@@ -59,7 +59,10 @@ export function InventoryPage() {
     profile?.display_name?.trim() ? `${profile.display_name.trim()} · Water Chaste` : 'Water Chaste Main Branch';
 
   const load = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data, error: err } = await supabase
       .from('products')
@@ -72,7 +75,10 @@ export function InventoryPage() {
   }, [businessId]);
 
   const loadLoyaltyFlag = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoyaltyLoading(false);
+      return;
+    }
     setLoyaltyLoading(true);
     try {
       setLoyaltyProgramActive(await fetchLoyaltyProgramActive(businessId));

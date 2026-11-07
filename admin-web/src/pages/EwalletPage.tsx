@@ -32,7 +32,10 @@ export function EwalletPage() {
   const [qrFile, setQrFile] = useState<File | null>(null);
 
   const load = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
     const { data, error: loadErr } = await supabase

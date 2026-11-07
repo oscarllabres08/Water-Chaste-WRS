@@ -155,9 +155,13 @@ export function CustomersPage() {
   }, [businessId, selectedEntry]);
 
   const load = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
+    try {
 
     const { data: customers, error: custErr } = await supabase
       .from('profiles')
@@ -518,7 +522,12 @@ export function CustomersPage() {
       return b.orderCount - a.orderCount;
     });
     setRows(visible);
-    setLoading(false);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load customers.');
+      setRows([]);
+    } finally {
+      setLoading(false);
+    }
   }, [businessId]);
 
   useEffect(() => {

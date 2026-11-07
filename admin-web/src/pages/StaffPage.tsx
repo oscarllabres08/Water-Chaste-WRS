@@ -23,7 +23,10 @@ export function StaffPage() {
   const [removeTarget, setRemoveTarget] = useState<Row | null>(null);
 
   const load = useCallback(async () => {
-    if (!user?.id || !businessId) return;
+    if (!user?.id || !businessId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     setError(null);
 

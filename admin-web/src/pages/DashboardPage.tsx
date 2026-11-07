@@ -134,8 +134,9 @@ export function DashboardPage() {
           .order('created_at', { ascending: false })
           .limit(fetchLimit),
       ]);
-      if (ordersRes.error) throw ordersRes.error;
-      if (posRes.error) throw posRes.error;
+      if (ordersRes.error || posRes.error) {
+        return { rows: [] as RecentOrderRow[], hasMore: false };
+      }
 
       const onlineRows = (ordersRes.data ?? []) as Parameters<typeof mapOnlineRecent>[0][];
       const customerIds = [...new Set(onlineRows.map((row) => row.customer_id).filter((id): id is string => Boolean(id)))];
@@ -164,6 +165,7 @@ export function DashboardPage() {
 
   const load = useCallback(async () => {
     if (!businessId) return;
+    try {
     const from = startOfToday().toISOString();
 
     const today = todayDateInputValue();
@@ -276,6 +278,9 @@ export function DashboardPage() {
     setBorrowedCustomers(borrowedRows.length);
     setSnapshot((snapshotRes.data ?? []) as SnapshotProduct[]);
     setTimeline(week?.timeline ?? []);
+    } catch {
+      /* Keep the station visible even if one request fails. */
+    }
   }, [businessId, fetchRecentOrders]);
 
   async function showMoreRecent() {

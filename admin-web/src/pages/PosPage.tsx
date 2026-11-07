@@ -112,7 +112,10 @@ export function PosPage() {
   const cartRef = useRef<HTMLElement | null>(null);
 
   const loadProducts = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const { data, error: err } = await supabase
       .from('products')

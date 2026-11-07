@@ -31,7 +31,10 @@ export function AnalyticsPage() {
   const [loading, setLoading] = useState(true);
 
   const load = useCallback(async () => {
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     const from = rangeStart(period);
 

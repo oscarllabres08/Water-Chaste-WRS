@@ -125,7 +125,10 @@ export function SalesAnalyticsPage() {
 
   const load = useCallback(async () => {
 
-    if (!businessId) return;
+    if (!businessId) {
+      setLoading(false);
+      return;
+    }
 
     setLoading(true);
 
